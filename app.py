@@ -544,9 +544,13 @@ def bcb_consultar():
     """
     data = request.json or {}
     indicador = data.get('indicador')
-    quantidade = data.get('quantidade', 24)
     data_inicial = data.get('data_inicial')
     data_final = data.get('data_final')
+
+    try:
+        quantidade = int(data.get('quantidade', 24))
+    except (TypeError, ValueError):
+        return jsonify({'erro': 'Quantidade inválida: deve ser um número inteiro'}), 400
 
     try:
         resultado = bcb.buscar_serie(indicador, quantidade=quantidade,
@@ -563,10 +567,14 @@ def bcb_importar():
     """Consulta o BCB/SGS e salva o resultado como um dataset na plataforma."""
     data = request.json or {}
     indicador = data.get('indicador')
-    quantidade = data.get('quantidade', 24)
     data_inicial = data.get('data_inicial')
     data_final = data.get('data_final')
     nome_dataset = data.get('nome')
+
+    try:
+        quantidade = int(data.get('quantidade', 24))
+    except (TypeError, ValueError):
+        return jsonify({'erro': 'Quantidade inválida: deve ser um número inteiro'}), 400
 
     try:
         registros = bcb.buscar_serie(indicador, quantidade=quantidade,

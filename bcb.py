@@ -192,6 +192,8 @@ def buscar_serie(chave_indicador, quantidade=24, data_inicial=None, data_final=N
             f'Opções: {", ".join(INDICADORES.keys())}'
         )
 
+    quantidade = int(quantidade)
+
     info = INDICADORES[chave_indicador]
     codigo = info['codigo']
 

@@ -1164,23 +1164,8 @@
                         return;
                     }
 
-                    let tabela = `<table class="table"><thead><tr>
-                        <th>Localidade</th><th>Período</th><th>Indicador</th><th>Valor</th><th>Unidade</th>
-                    </tr></thead><tbody>`;
-                    dados.forEach(d => {
-                        tabela += `<tr>
-                            <td>${d.localidade}</td>
-                            <td>${d.periodo}</td>
-                            <td>${d.indicador}</td>
-                            <td>${d.valor !== null ? d.valor.toLocaleString('pt-BR') : '-'}</td>
-                            <td>${d.unidade}</td>
-                        </tr>`;
-                    });
-                    tabela += '</tbody></table>';
-
                     document.getElementById('ibge_resultado').innerHTML = `
                         <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
-                        ${tabela}
                         <div class="form-group" style="margin-top: 20px;">
                             <label for="ibge_nome_dataset">Nome do Dataset (para salvar)</label>
                             <input type="text" id="ibge_nome_dataset" placeholder="Ex: População SC 2024">
@@ -1188,22 +1173,24 @@
                         <button class="btn btn-primary" onclick="ibge_importar()">💾 Salvar como Dataset</button>
                     `;
 
-                    // Gráfico de barras: uma barra por localidade/período, tooltip mostra o valor exato
+                    // Gráfico de linha: um ponto por localidade/período, tooltip mostra o valor exato
                     document.getElementById('ibge_indicador_chart_container').style.display = 'block';
                     criar_grafico('chart_ibge_indicador', {
-                        type: 'bar',
+                        type: 'line',
                         data: {
                             labels: dados.map(d => `${d.localidade} (${d.periodo})`),
                             datasets: [{
                                 label: `${dados[0].indicador} (${dados[0].unidade})`,
                                 data: dados.map(d => d.valor),
-                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
                                 borderColor: 'rgba(37, 99, 235, 1)',
-                                borderWidth: 1
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.2
                             }]
                         },
                         options: {
-                            scales: {y: {beginAtZero: true}}
+                            scales: {y: {beginAtZero: false}}
                         }
                     }, 'ibge_indicador_download');
                 })
@@ -1370,22 +1357,8 @@
                         return;
                     }
 
-                    let tabela = `<table class="table"><thead><tr>
-                        <th>Data</th><th>Indicador</th><th>Valor</th><th>Unidade</th>
-                    </tr></thead><tbody>`;
-                    dados.forEach(d => {
-                        tabela += `<tr>
-                            <td>${d.data}</td>
-                            <td>${d.indicador}</td>
-                            <td>${d.valor !== null ? d.valor.toLocaleString('pt-BR') : '-'}</td>
-                            <td>${d.unidade}</td>
-                        </tr>`;
-                    });
-                    tabela += '</tbody></table>';
-
                     document.getElementById('bcb_resultado').innerHTML = `
                         <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
-                        ${tabela}
                         <div class="form-group" style="margin-top: 20px;">
                             <label for="bcb_nome_dataset">Nome do Dataset (para salvar)</label>
                             <input type="text" id="bcb_nome_dataset" placeholder="Ex: Selic Meta 2024-2026">
