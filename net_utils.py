@@ -1,9 +1,9 @@
 """
 Utilitário compartilhado para chamadas HTTP a APIs externas (IBGE, Comex
 Stat, Banco Central), com retry automático em falhas transitórias de rede
-(timeout, erro de conexão, falha de resolução de DNS) — observadas de forma
-esporádica no ambiente de produção (Render, plano free), especialmente logo
-após o serviço "acordar" de um período de inatividade.
+(timeout, erro de conexão) — observadas de forma esporádica no ambiente de
+produção (Render, plano free), especialmente logo após o serviço "acordar"
+de um período de inatividade.
 """
 import time
 import requests
