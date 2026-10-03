@@ -1396,15 +1396,28 @@
                         <button class="btn btn-primary" onclick="comex_importar()">💾 Salvar como Dataset</button>
                     `;
 
-                    // Gráfico de barras: uma barra por município, tooltip mostra o valor FOB exato
+                    // Gráfico de barras: limitado aos 20 municípios de maior valor, senão
+                    // fica ilegível (um município de SC tem registro de comércio exterior
+                    // com praticamente todo ano, o que facilmente passa de 400 linhas).
+                    // Os dados já vêm ordenados por valor decrescente pela API.
+                    const LIMITE_GRAFICO_COMEX = 20;
+                    const dados_grafico = dados.slice(0, LIMITE_GRAFICO_COMEX);
+                    const aviso_limite = dados.length > LIMITE_GRAFICO_COMEX
+                        ? `<p style="color: var(--cinza-texto); font-size: 13px; margin-top: -10px; margin-bottom: 15px;">
+                               Mostrando os ${LIMITE_GRAFICO_COMEX} municípios de maior valor FOB (de ${dados.length} encontrados).
+                               Salve como dataset para ver todos os registros nas ferramentas de análise.
+                           </p>`
+                        : '';
+                    document.getElementById('comex_resultado').innerHTML += aviso_limite;
+
                     document.getElementById('comex_chart_container').style.display = 'block';
                     criar_grafico('chart_comex', {
                         type: 'bar',
                         data: {
-                            labels: dados.map(d => d.municipio),
+                            labels: dados_grafico.map(d => d.municipio),
                             datasets: [{
                                 label: `Valor FOB (US$) - ${fluxo === 'exportacao' ? 'Exportações' : 'Importações'}`,
-                                data: dados.map(d => d.valor_fob_usd),
+                                data: dados_grafico.map(d => d.valor_fob_usd),
                                 backgroundColor: 'rgba(200, 16, 46, 0.85)',
                                 borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 1

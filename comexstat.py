@@ -88,6 +88,11 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
             'periodo': f'{ano_inicio}-{ano_fim}',
         })
 
+    # Ordena por valor FOB decrescente — não garantido pela API em si, mas é
+    # a ordem mais útil para quem consulta (maiores exportadores/importadores
+    # primeiro) e o que a interface assume ao mostrar só os top N num gráfico.
+    resultado.sort(key=lambda r: r['valor_fob_usd'] or 0, reverse=True)
+
     return resultado
 
 
