@@ -287,6 +287,7 @@
             <button class="tab-button" onclick="abrir_aba('distribuicao')">📊 Distribuição</button>
             <button class="tab-button" onclick="abrir_aba('agrupamento')">🏷️ Agrupamento</button>
             <button class="tab-button" onclick="abrir_aba('ibge')">🏛️ Dados do IBGE</button>
+            <button class="tab-button" onclick="abrir_aba('bcb')">📊 Indicadores Macro (BCB)</button>
         </div>
 
         <!-- ABA: UPLOAD -->
@@ -551,6 +552,37 @@
                 <div id="comex_download"></div>
             </div>
         </div>
+
+        <!-- ABA: INDICADORES MACRO (BCB) -->
+        <div id="bcb" class="tab-content">
+            <h2>Indicadores Macroeconômicos (Banco Central do Brasil)</h2>
+            <p style="color: #6b7280; margin-bottom: 20px;">
+                Consulte séries históricas direto da API SGS do Banco Central (Selic, inflação,
+                câmbio e dívida pública) e importe como dataset para usar nas ferramentas de análise.
+            </p>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="bcb_indicador">Indicador</label>
+                    <select id="bcb_indicador">
+                        <option>Carregando indicadores...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="bcb_quantidade">Quantidade de registros mais recentes</label>
+                    <input type="number" id="bcb_quantidade" value="24" min="1" max="500">
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="bcb_consultar()">🔍 Consultar</button>
+
+            <div id="bcb_resultado" style="margin-top: 20px;"></div>
+            <div class="chart-container" id="bcb_chart_container" style="display: none;">
+                <canvas id="chart_bcb"></canvas>
+            </div>
+            <div id="bcb_download"></div>
+        </div>
     </div>
 
     <script>
@@ -608,6 +640,7 @@
             carregar_datasets();
             populate_dataset_selects();
             ibge_inicializar();
+            bcb_inicializar();
         });
 
         // Drag and drop
@@ -1291,6 +1324,111 @@
             })
                 .then(response => {
                     document.getElementById('comex_resultado').innerHTML +=
+                        `<div class="alert alert-success" style="margin-top: 15px;">
+                            ✅ Dataset "${response.data.nome}" salvo com ${response.data.linhas} linha(s)!
+                            Vá para a aba Datasets ou Análise Estatística para explorá-lo.
+                        </div>`;
+                    carregar_datasets();
+                    populate_dataset_selects();
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao salvar o dataset';
+                    alert('Erro: ' + msg);
+                });
+        }
+
+        function bcb_inicializar() {
+            axios.get('/api/bcb/indicadores')
+                .then(response => {
+                    const select = document.getElementById('bcb_indicador');
+                    select.innerHTML = '';
+                    response.data.indicadores.forEach(ind => {
+                        const option = document.createElement('option');
+                        option.value = ind.chave;
+                        option.textContent = `${ind.nome} (${ind.unidade})`;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(() => {
+                    document.getElementById('bcb_indicador').innerHTML = '<option>Erro ao carregar indicadores</option>';
+                });
+        }
+
+        function bcb_consultar() {
+            const indicador = document.getElementById('bcb_indicador').value;
+            const quantidade = document.getElementById('bcb_quantidade').value;
+
+            document.getElementById('bcb_resultado').innerHTML = '<div class="alert alert-info">⏳ Consultando a API do Banco Central (BCB/SGS)...</div>';
+
+            axios.post('/api/bcb/consultar', { indicador, quantidade })
+                .then(response => {
+                    const dados = response.data.dados;
+
+                    if (!dados.length) {
+                        document.getElementById('bcb_resultado').innerHTML =
+                            '<div class="alert alert-error">Nenhum dado encontrado para esses parâmetros.</div>';
+                        return;
+                    }
+
+                    let tabela = `<table class="table"><thead><tr>
+                        <th>Data</th><th>Indicador</th><th>Valor</th><th>Unidade</th>
+                    </tr></thead><tbody>`;
+                    dados.forEach(d => {
+                        tabela += `<tr>
+                            <td>${d.data}</td>
+                            <td>${d.indicador}</td>
+                            <td>${d.valor !== null ? d.valor.toLocaleString('pt-BR') : '-'}</td>
+                            <td>${d.unidade}</td>
+                        </tr>`;
+                    });
+                    tabela += '</tbody></table>';
+
+                    document.getElementById('bcb_resultado').innerHTML = `
+                        <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
+                        ${tabela}
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label for="bcb_nome_dataset">Nome do Dataset (para salvar)</label>
+                            <input type="text" id="bcb_nome_dataset" placeholder="Ex: Selic Meta 2024-2026">
+                        </div>
+                        <button class="btn btn-primary" onclick="bcb_importar()">💾 Salvar como Dataset</button>
+                    `;
+
+                    // Gráfico de linha: série temporal, tooltip mostra o valor exato em cada ponto
+                    document.getElementById('bcb_chart_container').style.display = 'block';
+                    criar_grafico('chart_bcb', {
+                        type: 'line',
+                        data: {
+                            labels: dados.map(d => d.data),
+                            datasets: [{
+                                label: `${dados[0].indicador} (${dados[0].unidade})`,
+                                data: dados.map(d => d.valor),
+                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.2
+                            }]
+                        },
+                        options: {
+                            scales: {y: {beginAtZero: false}}
+                        }
+                    }, 'bcb_download');
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao consultar o Banco Central';
+                    document.getElementById('bcb_resultado').innerHTML =
+                        `<div class="alert alert-error">❌ ${msg}</div>`;
+                });
+        }
+
+        function bcb_importar() {
+            const indicador = document.getElementById('bcb_indicador').value;
+            const quantidade = document.getElementById('bcb_quantidade').value;
+            const nome = document.getElementById('bcb_nome_dataset').value;
+
+            axios.post('/api/bcb/importar', { indicador, quantidade, nome })
+                .then(response => {
+                    document.getElementById('bcb_resultado').innerHTML +=
                         `<div class="alert alert-success" style="margin-top: 15px;">
                             ✅ Dataset "${response.data.nome}" salvo com ${response.data.linhas} linha(s)!
                             Vá para a aba Datasets ou Análise Estatística para explorá-lo.

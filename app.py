@@ -8,6 +8,7 @@ import json
 from db import get_connection, adapt_query, init_db, USE_POSTGRES, last_insert_id
 import ibge
 import comexstat
+import bcb
 
 app = Flask(__name__)
 CORS(app)
@@ -523,6 +524,90 @@ def comex_importar():
         return jsonify({'erro': str(e)}), 400
     except Exception as e:
         return jsonify({'erro': f'Falha ao importar dados do Comex Stat: {str(e)}'}), 502
+
+
+@app.route('/api/bcb/indicadores', methods=['GET'])
+def bcb_indicadores():
+    """Lista os indicadores macroeconômicos disponíveis via BCB/SGS."""
+    indicadores = [
+        {'chave': chave, 'nome': info['nome'], 'unidade': info['unidade'], 'frequencia': info['frequencia']}
+        for chave, info in bcb.INDICADORES.items()
+    ]
+    return jsonify({'indicadores': indicadores})
+
+
+@app.route('/api/bcb/consultar', methods=['POST'])
+def bcb_consultar():
+    """
+    Consulta a API SGS do Banco Central para um indicador macro
+    (Selic, IPCA, câmbio, dívida pública).
+    """
+    data = request.json or {}
+    indicador = data.get('indicador')
+    quantidade = data.get('quantidade', 24)
+    data_inicial = data.get('data_inicial')
+    data_final = data.get('data_final')
+
+    try:
+        resultado = bcb.buscar_serie(indicador, quantidade=quantidade,
+                                      data_inicial=data_inicial, data_final=data_final)
+        return jsonify({'dados': resultado, 'total': len(resultado)})
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar o Banco Central (BCB/SGS): {str(e)}'}), 502
+
+
+@app.route('/api/bcb/importar', methods=['POST'])
+def bcb_importar():
+    """Consulta o BCB/SGS e salva o resultado como um dataset na plataforma."""
+    data = request.json or {}
+    indicador = data.get('indicador')
+    quantidade = data.get('quantidade', 24)
+    data_inicial = data.get('data_inicial')
+    data_final = data.get('data_final')
+    nome_dataset = data.get('nome')
+
+    try:
+        registros = bcb.buscar_serie(indicador, quantidade=quantidade,
+                                      data_inicial=data_inicial, data_final=data_final)
+
+        if not registros:
+            return jsonify({'erro': 'Nenhum dado retornado pelo BCB para esses parâmetros'}), 400
+
+        if not nome_dataset:
+            nome_indicador = bcb.INDICADORES.get(indicador, {}).get('nome', indicador)
+            nome_dataset = f'BCB - {nome_indicador}'
+
+        conn = get_connection()
+        c = conn.cursor()
+        colunas = ','.join(registros[0].keys())
+
+        if USE_POSTGRES:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (%s, %s, %s, %s) RETURNING id',
+                (nome_dataset, 'Importado da API SGS do Banco Central (BCB)', 'bcb', colunas)
+            )
+        else:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (?, ?, ?, ?)',
+                (nome_dataset, 'Importado da API SGS do Banco Central (BCB)', 'bcb', colunas)
+            )
+        dataset_id = last_insert_id(c, conn)
+
+        for registro in registros:
+            c.execute(q('INSERT INTO dados (dataset_id, dados_json) VALUES (?, ?)'),
+                      (dataset_id, json.dumps(registro, default=str)))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'sucesso': True, 'dataset_id': dataset_id, 'nome': nome_dataset, 'linhas': len(registros)})
+
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao importar dados do BCB: {str(e)}'}), 502
 
 
 # Garante que o banco existe tanto rodando com `python app.py`
