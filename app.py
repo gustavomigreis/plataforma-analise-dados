@@ -310,6 +310,62 @@ def ibge_municipios():
         return jsonify({'erro': f'Falha ao consultar IBGE: {str(e)}'}), 502
 
 
+@app.route('/api/ibge/perfil/<int:codigo_municipio>', methods=['GET'])
+def ibge_perfil_municipio(codigo_municipio):
+    """
+    Retorna um "Perfil do Município" completo (estilo IBGE Cidades):
+    população, área, densidade, PIB, PIB per capita, rendimento e alfabetização,
+    tudo em uma única consulta.
+    """
+    try:
+        perfil = ibge.buscar_perfil_municipio(codigo_municipio)
+        return jsonify({'perfil': perfil})
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar perfil no IBGE: {str(e)}'}), 502
+
+
+@app.route('/api/ibge/perfil/<int:codigo_municipio>/salvar', methods=['POST'])
+def ibge_perfil_salvar(codigo_municipio):
+    """Salva o perfil completo do município como um dataset na plataforma."""
+    data = request.json or {}
+    nome_municipio = data.get('nome_municipio', f'Município {codigo_municipio}')
+    nome_dataset = data.get('nome') or f'IBGE - Perfil de {nome_municipio}'
+
+    try:
+        perfil = ibge.buscar_perfil_municipio(codigo_municipio)
+
+        registro = {'municipio': nome_municipio, 'codigo_ibge': codigo_municipio}
+        for chave, info in perfil.items():
+            registro[info['nome']] = info['valor']
+
+        conn = get_connection()
+        c = conn.cursor()
+        colunas = ','.join(registro.keys())
+
+        if USE_POSTGRES:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (%s, %s, %s, %s) RETURNING id',
+                (nome_dataset, 'Perfil municipal importado da API do IBGE/SIDRA', 'ibge', colunas)
+            )
+        else:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (?, ?, ?, ?)',
+                (nome_dataset, 'Perfil municipal importado da API do IBGE/SIDRA', 'ibge', colunas)
+            )
+        dataset_id = last_insert_id(c, conn)
+
+        c.execute(q('INSERT INTO dados (dataset_id, dados_json) VALUES (?, ?)'),
+                  (dataset_id, json.dumps(registro, default=str)))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'sucesso': True, 'dataset_id': dataset_id, 'nome': nome_dataset, 'linhas': 1})
+
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao salvar perfil: {str(e)}'}), 502
+
+
 @app.route('/api/ibge/consultar', methods=['POST'])
 def ibge_consultar():
     """
