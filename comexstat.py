@@ -55,14 +55,22 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
     resp.raise_for_status()
     dados_brutos = resp.json()
 
-    # A API retorna um objeto com os dados em 'data' -> 'list' (formato observado
-    # na documentação; pode precisar de ajuste fino após o primeiro teste real em produção)
+    # A API retorna um objeto com os dados em 'data' -> 'list'. Confirmado em
+    # produção (teste real com SC/exportações, 474 registros): o nome do
+    # município vem no campo 'noMunMinsgUf', no formato "Nome do Município - UF"
+    # (ex: "Palhoça - SC"), e não em 'city'/'coCity' como a documentação sugeria.
     lista = dados_brutos.get('data', {}).get('list', [])
 
     resultado = []
     for item in lista:
+        nome_mun_uf = item.get('noMunMinsgUf')
+        if nome_mun_uf:
+            municipio = nome_mun_uf.rsplit(' - ', 1)[0]
+        else:
+            municipio = 'Desconhecido'
+
         resultado.append({
-            'municipio': item.get('city') or item.get('coCity') or 'Desconhecido',
+            'municipio': municipio,
             'valor_fob_usd': item.get('metricFOB'),
             'peso_liquido_kg': item.get('metricKG'),
             'fluxo': fluxo,
