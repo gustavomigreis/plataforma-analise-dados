@@ -4,7 +4,7 @@ Automática). Sem necessidade de API key.
 
 Documentação: https://apisidra.ibge.gov.br
 """
-import requests
+from net_utils import request_com_retry
 
 SIDRA_BASE = 'https://apisidra.ibge.gov.br/values'
 
@@ -141,7 +141,7 @@ def buscar_dados(indicador_key, nivel, codigo_localidade=None, periodo='last'):
     """
     url = montar_url(indicador_key, nivel, codigo_localidade, periodo)
 
-    resp = requests.get(url, timeout=20)
+    resp = request_com_retry('get', url, timeout=20)
     resp.raise_for_status()
     dados_brutos = resp.json()
 
@@ -180,7 +180,7 @@ def _buscar_valor_unico(tabela, variavel, codigo_municipio, classificacoes='', p
     if classificacoes:
         url += f'/{classificacoes}'
 
-    resp = requests.get(url, timeout=20)
+    resp = request_com_retry('get', url, timeout=20)
     resp.raise_for_status()
     dados_brutos = resp.json()
 
@@ -281,7 +281,7 @@ def buscar_municipios_sc():
     usando a API de Localidades do IBGE (separada do SIDRA, mas também pública).
     """
     url = 'https://servicodados.ibge.gov.br/api/v1/localidades/estados/42/municipios'
-    resp = requests.get(url, timeout=20)
+    resp = request_com_retry('get', url, timeout=20)
     resp.raise_for_status()
     dados = resp.json()
 

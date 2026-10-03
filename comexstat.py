@@ -11,12 +11,16 @@ local onde a mercadoria foi produzida ou embarcada. Isso é uma limitação da
 fonte oficial, não desta implementação — deve ficar claro para quem for
 interpretar os dados.
 """
-import requests
+from net_utils import request_com_retry
 
 COMEX_BASE = 'https://api-comexstat.mdic.gov.br'
 
-# Código do IBGE/Comex para Santa Catarina (usa o mesmo código de UF = 42)
-UF_SC = 42
+# ATENÇÃO: a API do Comex Stat usa sua PRÓPRIA tabela de códigos de UF,
+# diferente do código IBGE. Confirmado contra o endpoint oficial de filtros
+# (GET /general/filters/state): no Comex Stat, 42 = Paraná e 44 = Santa
+# Catarina (no IBGE, SC é 42). Um bug anterior usava o código do IBGE (42)
+# aqui e retornava, silenciosamente, dados do Paraná em vez de SC.
+UF_SC = 44
 
 FLUXOS = {
     'exportacao': 'export',
@@ -51,7 +55,7 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
         'metrics': ['metricFOB', 'metricKG'],
     }
 
-    resp = requests.post(f'{COMEX_BASE}/cities', json=payload, timeout=30)
+    resp = request_com_retry('post', f'{COMEX_BASE}/cities', json=payload, timeout=30)
     resp.raise_for_status()
     dados_brutos = resp.json()
 
@@ -65,9 +69,16 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
     for item in lista:
         nome_mun_uf = item.get('noMunMinsgUf')
         if nome_mun_uf:
-            municipio = nome_mun_uf.rsplit(' - ', 1)[0]
+            municipio, _, sigla_uf = nome_mun_uf.rpartition(' - ')
         else:
-            municipio = 'Desconhecido'
+            municipio, sigla_uf = 'Desconhecido', None
+
+        # Checagem defensiva: garante que o registro é mesmo de SC, já que um
+        # código de UF incorreto no filtro causaria silenciosamente dados de
+        # outro estado (como aconteceu antes com o código do IBGE em vez do
+        # código próprio do Comex Stat). Se a UF vier e não for SC, descarta.
+        if sigla_uf and uf == UF_SC and sigla_uf != 'SC':
+            continue
 
         resultado.append({
             'municipio': municipio,
@@ -85,6 +96,6 @@ def listar_municipios_disponiveis_sc():
     Lista os municípios de SC com dados disponíveis no Comex Stat,
     usando o endpoint de filtros da própria API.
     """
-    resp = requests.get(f'{COMEX_BASE}/cities/filters/city', params={'state': UF_SC}, timeout=20)
+    resp = request_com_retry('get', f'{COMEX_BASE}/cities/filters/city', params={'state': UF_SC}, timeout=20)
     resp.raise_for_status()
     return resp.json()

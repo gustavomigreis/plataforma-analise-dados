@@ -7,8 +7,9 @@ Documentação: https://dadosabertos.bcb.gov.br/dataset/
 Sem necessidade de API key. Formato de resposta padrão: lista de objetos
 {"data": "DD/MM/AAAA", "valor": "<string decimal>"}.
 """
-import requests
 from datetime import datetime
+
+from net_utils import request_com_retry
 
 SGS_BASE = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs'
 
@@ -82,7 +83,7 @@ def buscar_serie(chave_indicador, quantidade=24, data_inicial=None, data_final=N
         url = f'{SGS_BASE}.{codigo}/dados/ultimos/{quantidade}'
         params = {'formato': 'json'}
 
-    resp = requests.get(url, params=params, timeout=30)
+    resp = request_com_retry('get', url, params=params, timeout=30)
     resp.raise_for_status()
     dados_brutos = resp.json()
 
