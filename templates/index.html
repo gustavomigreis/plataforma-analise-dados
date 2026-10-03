@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma de Análise de Dados Geográfica e Econômica</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2563eb;
+            --secondary: #1e40af;
+            --success: #059669;
+            --danger: #dc2626;
+            --warning: #f59e0b;
+            --light: #f3f4f6;
+            --dark: #1f2937;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--dark);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: var(--primary);
+            margin-bottom: 5px;
+            font-size: 2em;
+        }
+
+        .header p {
+            color: #6b7280;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab-button {
+            background: white;
+            border: 2px solid var(--border);
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .tab-button.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--secondary);
+        }
+
+        .btn-secondary {
+            background: var(--light);
+            color: var(--dark);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .dropzone {
+            border: 2px dashed var(--primary);
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f0f9ff;
+        }
+
+        .dropzone:hover {
+            background: #e0f2fe;
+            border-color: var(--secondary);
+        }
+
+        .dropzone.dragover {
+            background: #e0f2fe;
+            border-color: var(--secondary);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .table th {
+            background: var(--light);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table tr:hover {
+            background: var(--light);
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            .header h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Plataforma de Análise de Dados</h1>
+            <p>Análise Geográfica, Econômica e Social</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="abrir_aba('upload')">📤 Upload</button>
+            <button class="tab-button" onclick="abrir_aba('datasets')">📁 Datasets</button>
+            <button class="tab-button" onclick="abrir_aba('estatistica')">📈 Estatística</button>
+            <button class="tab-button" onclick="abrir_aba('correlacao')">🔗 Correlação</button>
+            <button class="tab-button" onclick="abrir_aba('distribuicao')">📊 Distribuição</button>
+            <button class="tab-button" onclick="abrir_aba('agrupamento')">🏷️ Agrupamento</button>
+        </div>
+
+        <!-- ABA: UPLOAD -->
+        <div id="upload" class="tab-content active">
+            <h2>Fazer Upload de Dados</h2>
+            <div class="form-group">
+                <label>Arraste o arquivo aqui ou clique para selecionar</label>
+                <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                    <p>📎 CSV ou Excel (.xlsx)</p>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Clique ou arraste arquivos aqui</p>
+                </div>
+                <input type="file" id="fileInput" style="display: none;" accept=".csv,.xlsx,.xls" onchange="handle_file">
+            </div>
+
+            <div class="form-group">
+                <label for="nome_dataset">Nome do Dataset</label>
+                <input type="text" id="nome_dataset" placeholder="Ex: Vendas SC 2024">
+            </div>
+
+            <div class="form-group">
+                <label for="descricao_dataset">Descrição (opcional)</label>
+                <textarea id="descricao_dataset" placeholder="Descreva o dataset..." rows="3"></textarea>
+            </div>
+
+            <button class="btn btn-primary" onclick="fazer_upload()">Fazer Upload</button>
+            <div id="upload_status"></div>
+        </div>
+
+        <!-- ABA: DATASETS -->
+        <div id="datasets" class="tab-content">
+            <h2>Datasets Disponíveis</h2>
+            <button class="btn btn-secondary" onclick="carregar_datasets()">🔄 Atualizar</button>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>Descrição</th>
+                        <th>Data</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="datasets_list"></tbody>
+            </table>
+        </div>
+
+        <!-- ABA: ANÁLISE ESTATÍSTICA -->
+        <div id="estatistica" class="tab-content">
+            <h2>Análise Estatística</h2>
+            <div class="form-group">
+                <label for="dataset_stat">Dataset</label>
+                <select id="dataset_stat" onchange="carregar_colunas_stat()">
+                    <option>Selecione um dataset...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="coluna_stat">Coluna</label>
+                <select id="coluna_stat"></select>
+            </div>
+
+            <button class="btn btn-primary" onclick="executar_estatistica()">Analisar</button>
+
+            <div id="stats_result"></div>
+        </div>
+
+        <!-- ABA: CORRELAÇÃO -->
+        <div id="correlacao" class="tab-content">
+            <h2>Matriz de Correlação</h2>
+            <div class="form-group">
+                <label for="dataset_corr">Dataset</label>
+                <select id="dataset_corr"></select>
+            </div>
+
+            <button class="btn btn-primary" onclick="executar_correlacao()">Calcular Correlação</button>
+            <div class="chart-container">
+                <canvas id="chart_correlacao"></canvas>
+            </div>
+        </div>
+
+        <!-- ABA: DISTRIBUIÇÃO -->
+        <div id="distribuicao" class="tab-content">
+            <h2>Análise de Distribuição</h2>
+            <div class="form-group">
+                <label for="dataset_dist">Dataset</label>
+                <select id="dataset_dist" onchange="carregar_colunas_dist()"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="coluna_dist">Coluna</label>
+                <select id="coluna_dist"></select>
+            </div>
+
+            <button class="btn btn-primary" onclick="executar_distribuicao()">Gerar Histograma</button>
+            <div class="chart-container">
+                <canvas id="chart_dist"></canvas>
+            </div>
+        </div>
+
+        <!-- ABA: AGRUPAMENTO -->
+        <div id="agrupamento" class="tab-content">
+            <h2>Agrupamento de Dados</h2>
+            <div class="form-group">
+                <label for="dataset_agr">Dataset</label>
+                <select id="dataset_agr" onchange="carregar_colunas_agr()"></select>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="coluna_grupo">Coluna de Grupo</label>
+                    <select id="coluna_grupo" id="coluna_grupo_select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label for="coluna_valor">Coluna de Valor</label>
+                    <select id="coluna_valor"></select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="funcao_agr">Função de Agregação</label>
+                <select id="funcao_agr">
+                    <option value="mean">Média</option>
+                    <option value="sum">Soma</option>
+                    <option value="count">Contagem</option>
+                    <option value="min">Mínimo</option>
+                    <option value="max">Máximo</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary" onclick="executar_agrupamento()">Agrupar</button>
+            <div class="chart-container">
+                <canvas id="chart_agr"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let datasets_global = [];
+        let current_dataset_id = null;
+
+        // Inicializar
+        window.addEventListener('load', () => {
+            carregar_datasets();
+            populate_dataset_selects();
+        });
+
+        // Drag and drop
+        const dropzone = document.getElementById('dropzone');
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('fileInput').files = files;
+            }
+        });
+
+        function abrir_aba(nome_aba) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(nome_aba).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function fazer_upload() {
+            const file = document.getElementById('fileInput').files[0];
+            const nome = document.getElementById('nome_dataset').value || file.name;
+            const descricao = document.getElementById('descricao_dataset').value;
+
+            if (!file) {
+                alert('Selecione um arquivo!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('nome', nome);
+            formData.append('descricao', descricao);
+
+            axios.post('/api/upload', formData)
+                .then(response => {
+                    document.getElementById('upload_status').innerHTML = 
+                        `<div class="alert alert-success">✅ Upload realizado! ${response.data.linhas} linhas importadas.</div>`;
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('nome_dataset').value = '';
+                    document.getElementById('descricao_dataset').value = '';
+                    carregar_datasets();
+                    populate_dataset_selects();
+                })
+                .catch(error => {
+                    document.getElementById('upload_status').innerHTML = 
+                        `<div class="alert alert-error">❌ Erro: ${error.response.data.erro}</div>`;
+                });
+        }
+
+        function carregar_datasets() {
+            axios.get('/api/datasets')
+                .then(response => {
+                    datasets_global = response.data.datasets;
+                    let html = '';
+                    datasets_global.forEach(ds => {
+                        html += `<tr>
+                            <td>${ds.id}</td>
+                            <td>${ds.nome}</td>
+                            <td>${ds.descricao || '-'}</td>
+                            <td>${new Date(ds.criado_em).toLocaleDateString('pt-BR')}</td>
+                            <td><button class="btn btn-secondary" onclick="visualizar_dataset(${ds.id})">Ver</button></td>
+                        </tr>`;
+                    });
+                    document.getElementById('datasets_list').innerHTML = html;
+                });
+        }
+
+        function populate_dataset_selects() {
+            setTimeout(() => {
+                const selects = ['dataset_stat', 'dataset_corr', 'dataset_dist', 'dataset_agr'];
+                selects.forEach(select_id => {
+                    const select = document.getElementById(select_id);
+                    select.innerHTML = '<option>Selecione um dataset...</option>';
+                    datasets_global.forEach(ds => {
+                        const option = document.createElement('option');
+                        option.value = ds.id;
+                        option.textContent = ds.nome;
+                        select.appendChild(option);
+                    });
+                });
+            }, 500);
+        }
+
+        function carregar_colunas_stat() {
+            const dataset_id = document.getElementById('dataset_stat').value;
+            if (dataset_id === 'Selecione um dataset...') return;
+            
+            axios.get(`/api/datasets/${dataset_id}`)
+                .then(response => {
+                    const select = document.getElementById('coluna_stat');
+                    select.innerHTML = '';
+                    response.data.colunas.forEach(col => {
+                        const option = document.createElement('option');
+                        option.value = col;
+                        option.textContent = col;
+                        select.appendChild(option);
+                    });
+                });
+        }
+
+        function carregar_colunas_dist() {
+            const dataset_id = document.getElementById('dataset_dist').value;
+            if (dataset_id === 'Selecione um dataset...') return;
+            
+            axios.get(`/api/datasets/${dataset_id}`)
+                .then(response => {
+                    const select = document.getElementById('coluna_dist');
+                    select.innerHTML = '';
+                    response.data.colunas.forEach(col => {
+                        const option = document.createElement('option');
+                        option.value = col;
+                        option.textContent = col;
+                        select.appendChild(option);
+                    });
+                });
+        }
+
+        function carregar_colunas_agr() {
+            const dataset_id = document.getElementById('dataset_agr').value;
+            if (dataset_id === 'Selecione um dataset...') return;
+            
+            axios.get(`/api/datasets/${dataset_id}`)
+                .then(response => {
+                    ['coluna_grupo', 'coluna_valor'].forEach(select_id => {
+                        const select = document.getElementById(select_id);
+                        select.innerHTML = '';
+                        response.data.colunas.forEach(col => {
+                            const option = document.createElement('option');
+                            option.value = col;
+                            option.textContent = col;
+                            select.appendChild(option);
+                        });
+                    });
+                });
+        }
+
+        function executar_estatistica() {
+            const dataset_id = document.getElementById('dataset_stat').value;
+            const coluna = document.getElementById('coluna_stat').value;
+
+            if (dataset_id === 'Selecione um dataset...' || !coluna) {
+                alert('Selecione dataset e coluna!');
+                return;
+            }
+
+            axios.post('/api/analise/estatistica', {dataset_id, coluna})
+                .then(response => {
+                    const r = response.data;
+                    document.getElementById('stats_result').innerHTML = `
+                        <div class="stats">
+                            <div class="stat-card">
+                                <h3>Contagem</h3>
+                                <div class="value">${r.contagem}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Média</h3>
+                                <div class="value">${r.media.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Mediana</h3>
+                                <div class="value">${r.mediana.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Desvio Padrão</h3>
+                                <div class="value">${r.desvio_padrao.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Mínimo</h3>
+                                <div class="value">${r.minimo.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Máximo</h3>
+                                <div class="value">${r.maximo.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(error => alert('Erro: ' + error.response.data.erro));
+        }
+
+        function executar_correlacao() {
+            const dataset_id = document.getElementById('dataset_corr').value;
+            if (dataset_id === 'Selecione um dataset...') {
+                alert('Selecione um dataset!');
+                return;
+            }
+
+            axios.post('/api/analise/correlacao', {dataset_id})
+                .then(response => {
+                    const correlacao = response.data.correlacao;
+                    const colunas = Object.keys(correlacao);
+                    
+                    const ctx = document.getElementById('chart_correlacao').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bubble',
+                        data: {
+                            labels: colunas,
+                            datasets: colunas.map((col, idx) => ({
+                                label: col,
+                                data: colunas.map(c => ({
+                                    x: colunas.indexOf(c),
+                                    y: idx,
+                                    r: Math.abs(correlacao[col][c]) * 10
+                                })),
+                                backgroundColor: `rgba(37, 99, 235, ${Math.abs(correlacao[col][colunas[0]]) * 0.7})`
+                            }))
+                        },
+                        options: {
+                            plugins: {
+                                legend: {display: false}
+                            },
+                            scales: {
+                                x: {title: {display: true, text: 'Coluna'}},
+                                y: {title: {display: true, text: 'Correlação'}}
+                            }
+                        }
+                    });
+                })
+                .catch(error => alert('Erro: ' + error.response.data.erro));
+        }
+
+        function executar_distribuicao() {
+            const dataset_id = document.getElementById('dataset_dist').value;
+            const coluna = document.getElementById('coluna_dist').value;
+
+            if (dataset_id === 'Selecione um dataset...' || !coluna) {
+                alert('Selecione dataset e coluna!');
+                return;
+            }
+
+            axios.post('/api/analise/distribuicao', {dataset_id, coluna, bins: 10})
+                .then(response => {
+                    const r = response.data;
+                    const labels = [];
+                    for (let i = 0; i < r.limites.length - 1; i++) {
+                        labels.push(`${r.limites[i].toFixed(1)}`);
+                    }
+
+                    const ctx = document.getElementById('chart_dist').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: coluna,
+                                data: r.contagens,
+                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {beginAtZero: true}
+                            }
+                        }
+                    });
+                })
+                .catch(error => alert('Erro: ' + error.response.data.erro));
+        }
+
+        function executar_agrupamento() {
+            const dataset_id = document.getElementById('dataset_agr').value;
+            const coluna_grupo = document.getElementById('coluna_grupo').value;
+            const coluna_valor = document.getElementById('coluna_valor').value;
+            const funcao = document.getElementById('funcao_agr').value;
+
+            if (dataset_id === 'Selecione um dataset...' || !coluna_grupo || !coluna_valor) {
+                alert('Preencha todos os campos!');
+                return;
+            }
+
+            axios.post('/api/analise/agrupamento', {
+                dataset_id,
+                coluna_grupo,
+                coluna_valor,
+                funcao
+            })
+                .then(response => {
+                    const r = response.data;
+                    const ctx = document.getElementById('chart_agr').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: r.grupos,
+                            datasets: [{
+                                label: `${r.funcao}(${coluna_valor})`,
+                                data: r.valores,
+                                backgroundColor: 'rgba(6, 150, 105, 0.7)',
+                                borderColor: 'rgba(6, 150, 105, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {beginAtZero: true}
+                            }
+                        }
+                    });
+                })
+                .catch(error => alert('Erro: ' + error.response.data.erro));
+        }
+
+        function visualizar_dataset(dataset_id) {
+            axios.get(`/api/datasets/${dataset_id}`)
+                .then(response => {
+                    alert(`Dataset: ${response.data.nome}\n\nColunas: ${response.data.colunas.join(', ')}\n\nLinhas: ${response.data.dados.length}`);
+                });
+        }
+    </script>
+</body>
+</html>
