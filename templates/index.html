@@ -286,6 +286,7 @@
             <button class="tab-button" onclick="abrir_aba('correlacao')">🔗 Correlação</button>
             <button class="tab-button" onclick="abrir_aba('distribuicao')">📊 Distribuição</button>
             <button class="tab-button" onclick="abrir_aba('agrupamento')">🏷️ Agrupamento</button>
+            <button class="tab-button" onclick="abrir_aba('ibge')">🏛️ Dados do IBGE</button>
         </div>
 
         <!-- ABA: UPLOAD -->
@@ -421,6 +422,51 @@
                 <canvas id="chart_agr"></canvas>
             </div>
         </div>
+
+        <!-- ABA: DADOS DO IBGE -->
+        <div id="ibge" class="tab-content">
+            <h2>Importar Dados do IBGE</h2>
+            <p style="color: #6b7280; margin-bottom: 20px;">
+                Consulte dados oficiais direto da API do IBGE/SIDRA (população, PIB municipal, etc.)
+                e importe como um dataset para usar nas ferramentas de análise.
+            </p>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="ibge_indicador">Indicador</label>
+                    <select id="ibge_indicador"></select>
+                </div>
+
+                <div class="form-group">
+                    <label for="ibge_nivel">Nível Territorial</label>
+                    <select id="ibge_nivel" onchange="ibge_atualizar_nivel()">
+                        <option value="brasil">Brasil</option>
+                        <option value="uf" selected>Santa Catarina (Estado)</option>
+                        <option value="municipio">Município de Santa Catarina</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" id="ibge_municipio_group" style="display: none;">
+                <label for="ibge_municipio">Município</label>
+                <select id="ibge_municipio">
+                    <option>Carregando municípios...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="ibge_periodo">Período</label>
+                <select id="ibge_periodo">
+                    <option value="last">Mais recente disponível</option>
+                    <option value="last 5">Últimos 5 períodos</option>
+                    <option value="last 10">Últimos 10 períodos</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary" onclick="ibge_consultar()">🔍 Consultar</button>
+
+            <div id="ibge_resultado" style="margin-top: 20px;"></div>
+        </div>
     </div>
 
     <script>
@@ -431,6 +477,7 @@
         window.addEventListener('load', () => {
             carregar_datasets();
             populate_dataset_selects();
+            ibge_inicializar();
         });
 
         // Drag and drop
@@ -752,6 +799,136 @@
             axios.get(`/api/datasets/${dataset_id}`)
                 .then(response => {
                     alert(`Dataset: ${response.data.nome}\n\nColunas: ${response.data.colunas.join(', ')}\n\nLinhas: ${response.data.dados.length}`);
+                });
+        }
+
+        // ===== IBGE =====
+        let ibge_municipios_cache = [];
+
+        function ibge_inicializar() {
+            // Carrega a lista de indicadores disponíveis
+            axios.get('/api/ibge/indicadores')
+                .then(response => {
+                    const select = document.getElementById('ibge_indicador');
+                    select.innerHTML = '';
+                    response.data.indicadores.forEach(ind => {
+                        const option = document.createElement('option');
+                        option.value = ind.chave;
+                        option.textContent = `${ind.nome} (${ind.unidade})`;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(() => {
+                    document.getElementById('ibge_indicador').innerHTML = '<option>Erro ao carregar indicadores</option>';
+                });
+
+            // Carrega a lista de municípios de SC (usada se o nível "município" for escolhido)
+            axios.get('/api/ibge/municipios')
+                .then(response => {
+                    ibge_municipios_cache = response.data.municipios;
+                    const select = document.getElementById('ibge_municipio');
+                    select.innerHTML = '';
+                    ibge_municipios_cache
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .forEach(m => {
+                            const option = document.createElement('option');
+                            option.value = m.codigo;
+                            option.textContent = m.nome;
+                            select.appendChild(option);
+                        });
+                })
+                .catch(() => {
+                    document.getElementById('ibge_municipio').innerHTML = '<option>Erro ao carregar municípios</option>';
+                });
+        }
+
+        function ibge_atualizar_nivel() {
+            const nivel = document.getElementById('ibge_nivel').value;
+            const grupo_municipio = document.getElementById('ibge_municipio_group');
+            grupo_municipio.style.display = (nivel === 'municipio') ? 'block' : 'none';
+        }
+
+        function ibge_consultar() {
+            const indicador = document.getElementById('ibge_indicador').value;
+            const nivel = document.getElementById('ibge_nivel').value;
+            const periodo = document.getElementById('ibge_periodo').value;
+            const codigo_localidade = (nivel === 'uf')
+                ? 42  // Santa Catarina
+                : (nivel === 'municipio')
+                    ? document.getElementById('ibge_municipio').value
+                    : null;
+
+            document.getElementById('ibge_resultado').innerHTML = '<div class="alert alert-info">⏳ Consultando API do IBGE...</div>';
+
+            axios.post('/api/ibge/consultar', {
+                indicador, nivel, codigo_localidade, periodo
+            })
+                .then(response => {
+                    const dados = response.data.dados;
+
+                    if (!dados.length) {
+                        document.getElementById('ibge_resultado').innerHTML =
+                            '<div class="alert alert-error">Nenhum dado encontrado para esses parâmetros.</div>';
+                        return;
+                    }
+
+                    let tabela = `<table class="table"><thead><tr>
+                        <th>Localidade</th><th>Período</th><th>Indicador</th><th>Valor</th><th>Unidade</th>
+                    </tr></thead><tbody>`;
+                    dados.forEach(d => {
+                        tabela += `<tr>
+                            <td>${d.localidade}</td>
+                            <td>${d.periodo}</td>
+                            <td>${d.indicador}</td>
+                            <td>${d.valor !== null ? d.valor.toLocaleString('pt-BR') : '-'}</td>
+                            <td>${d.unidade}</td>
+                        </tr>`;
+                    });
+                    tabela += '</tbody></table>';
+
+                    document.getElementById('ibge_resultado').innerHTML = `
+                        <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
+                        ${tabela}
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label for="ibge_nome_dataset">Nome do Dataset (para salvar)</label>
+                            <input type="text" id="ibge_nome_dataset" placeholder="Ex: População SC 2024">
+                        </div>
+                        <button class="btn btn-primary" onclick="ibge_importar()">💾 Salvar como Dataset</button>
+                    `;
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao consultar a API do IBGE';
+                    document.getElementById('ibge_resultado').innerHTML =
+                        `<div class="alert alert-error">❌ ${msg}</div>`;
+                });
+        }
+
+        function ibge_importar() {
+            const indicador = document.getElementById('ibge_indicador').value;
+            const nivel = document.getElementById('ibge_nivel').value;
+            const periodo = document.getElementById('ibge_periodo').value;
+            const nome = document.getElementById('ibge_nome_dataset').value;
+            const codigo_localidade = (nivel === 'uf')
+                ? 42
+                : (nivel === 'municipio')
+                    ? document.getElementById('ibge_municipio').value
+                    : null;
+
+            axios.post('/api/ibge/importar', {
+                indicador, nivel, codigo_localidade, periodo, nome
+            })
+                .then(response => {
+                    document.getElementById('ibge_resultado').innerHTML +=
+                        `<div class="alert alert-success" style="margin-top: 15px;">
+                            ✅ Dataset "${response.data.nome}" salvo com ${response.data.linhas} linha(s)!
+                            Vá para a aba Datasets ou Análise Estatística para explorá-lo.
+                        </div>`;
+                    carregar_datasets();
+                    populate_dataset_selects();
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao salvar o dataset';
+                    alert('Erro: ' + msg);
                 });
         }
     </script>

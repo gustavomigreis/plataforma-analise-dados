@@ -6,6 +6,7 @@ import os
 import json
 
 from db import get_connection, adapt_query, init_db, USE_POSTGRES, last_insert_id
+import ibge
 
 app = Flask(__name__)
 CORS(app)
@@ -286,6 +287,109 @@ def analise_agrupamento():
 
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/ibge/indicadores', methods=['GET'])
+def ibge_indicadores():
+    """Lista os indicadores do IBGE disponíveis para consulta."""
+    return jsonify({
+        'indicadores': [
+            {'chave': k, 'nome': v['nome'], 'unidade': v['unidade']}
+            for k, v in ibge.INDICADORES.items()
+        ]
+    })
+
+
+@app.route('/api/ibge/municipios', methods=['GET'])
+def ibge_municipios():
+    """Lista os municípios de Santa Catarina com seus códigos IBGE."""
+    try:
+        municipios = ibge.buscar_municipios_sc()
+        return jsonify({'municipios': municipios})
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar IBGE: {str(e)}'}), 502
+
+
+@app.route('/api/ibge/consultar', methods=['POST'])
+def ibge_consultar():
+    """
+    Consulta um indicador do IBGE/SIDRA e retorna os dados brutos
+    (sem salvar), para o usuário pré-visualizar antes de importar.
+    """
+    data = request.json
+    indicador = data.get('indicador')
+    nivel = data.get('nivel')
+    codigo_localidade = data.get('codigo_localidade')
+    periodo = data.get('periodo', 'last')
+
+    try:
+        resultado = ibge.buscar_dados(indicador, nivel, codigo_localidade, periodo)
+        return jsonify({'dados': resultado, 'total': len(resultado)})
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar IBGE: {str(e)}'}), 502
+
+
+@app.route('/api/ibge/importar', methods=['POST'])
+def ibge_importar():
+    """
+    Consulta um indicador do IBGE/SIDRA e salva o resultado como um novo
+    dataset na plataforma, pronto para usar nas ferramentas de análise.
+    """
+    data = request.json
+    indicador = data.get('indicador')
+    nivel = data.get('nivel')
+    codigo_localidade = data.get('codigo_localidade')
+    periodo = data.get('periodo', 'last')
+    nome_dataset = data.get('nome')
+
+    try:
+        registros = ibge.buscar_dados(indicador, nivel, codigo_localidade, periodo)
+
+        if not registros:
+            return jsonify({'erro': 'Nenhum dado retornado pelo IBGE para esses parâmetros'}), 400
+
+        if not nome_dataset:
+            nome_ind = ibge.INDICADORES[indicador]['nome']
+            nome_dataset = f'IBGE - {nome_ind} ({nivel})'
+
+        conn = get_connection()
+        c = conn.cursor()
+
+        colunas = ','.join(registros[0].keys())
+
+        if USE_POSTGRES:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (%s, %s, %s, %s) RETURNING id',
+                (nome_dataset, 'Importado da API do IBGE/SIDRA', 'ibge', colunas)
+            )
+        else:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (?, ?, ?, ?)',
+                (nome_dataset, 'Importado da API do IBGE/SIDRA', 'ibge', colunas)
+            )
+        dataset_id = last_insert_id(c, conn)
+
+        for registro in registros:
+            dados_json = json.dumps(registro, default=str)
+            c.execute(q('INSERT INTO dados (dataset_id, dados_json) VALUES (?, ?)'),
+                      (dataset_id, dados_json))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'sucesso': True,
+            'dataset_id': dataset_id,
+            'nome': nome_dataset,
+            'linhas': len(registros)
+        })
+
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao importar dados do IBGE: {str(e)}'}), 502
 
 
 # Garante que o banco existe tanto rodando com `python app.py`
