@@ -351,6 +351,10 @@
             <button class="btn btn-primary" onclick="executar_estatistica()">Analisar</button>
 
             <div id="stats_result"></div>
+            <div class="chart-container" id="stats_chart_container" style="display: none;">
+                <canvas id="chart_stats"></canvas>
+            </div>
+            <div id="stats_download"></div>
         </div>
 
         <!-- ABA: CORRELAÇÃO -->
@@ -365,6 +369,7 @@
             <div class="chart-container">
                 <canvas id="chart_correlacao"></canvas>
             </div>
+            <div id="correlacao_download"></div>
         </div>
 
         <!-- ABA: DISTRIBUIÇÃO -->
@@ -384,6 +389,7 @@
             <div class="chart-container">
                 <canvas id="chart_dist"></canvas>
             </div>
+            <div id="dist_download"></div>
         </div>
 
         <!-- ABA: AGRUPAMENTO -->
@@ -421,6 +427,7 @@
             <div class="chart-container">
                 <canvas id="chart_agr"></canvas>
             </div>
+            <div id="agr_download"></div>
         </div>
 
         <!-- ABA: DADOS DO IBGE -->
@@ -448,6 +455,10 @@
                 <button class="btn btn-primary" onclick="ibge_carregar_perfil()">🏙️ Ver Perfil do Município</button>
 
                 <div id="ibge_perfil_resultado" style="margin-top: 25px;"></div>
+                <div class="chart-container" id="ibge_perfil_chart_container" style="display: none;">
+                    <canvas id="chart_ibge_perfil"></canvas>
+                </div>
+                <div id="ibge_perfil_download"></div>
             </div>
 
             <!-- SUBMODO: CONSULTA POR INDICADOR -->
@@ -487,6 +498,10 @@
                 <button class="btn btn-primary" onclick="ibge_consultar()">🔍 Consultar</button>
 
                 <div id="ibge_resultado" style="margin-top: 20px;"></div>
+                <div class="chart-container" id="ibge_indicador_chart_container" style="display: none;">
+                    <canvas id="chart_ibge_indicador"></canvas>
+                </div>
+                <div id="ibge_indicador_download"></div>
             </div>
         </div>
     </div>
@@ -494,6 +509,52 @@
     <script>
         let datasets_global = [];
         let current_dataset_id = null;
+        let charts_ativos = {};  // guarda as instâncias Chart.js por canvas id, para destruir antes de recriar
+
+        // ===== Utilitário genérico de gráfico com tooltip + botão de download =====
+        // canvasId: id do elemento <canvas>
+        // chartConfig: configuração padrão do Chart.js (type, data, options)
+        // containerId: id do elemento onde o botão de download será inserido (logo abaixo do canvas)
+        function criar_grafico(canvasId, chartConfig, containerId) {
+            // Destrói gráfico anterior no mesmo canvas, se existir (evita sobreposição ao re-consultar)
+            if (charts_ativos[canvasId]) {
+                charts_ativos[canvasId].destroy();
+            }
+
+            // Garante tooltip habilitado (já é o padrão do Chart.js, mas deixamos explícito)
+            chartConfig.options = chartConfig.options || {};
+            chartConfig.options.plugins = chartConfig.options.plugins || {};
+            chartConfig.options.plugins.tooltip = chartConfig.options.plugins.tooltip || {enabled: true};
+            chartConfig.options.responsive = true;
+            chartConfig.options.maintainAspectRatio = false;
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const chart = new Chart(ctx, chartConfig);
+            charts_ativos[canvasId] = chart;
+
+            // Adiciona (ou atualiza) o botão de download abaixo do gráfico
+            if (containerId) {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML = `
+                        <button class="btn btn-secondary" onclick="baixar_grafico('${canvasId}')" style="margin-top: 10px;">
+                            ⬇️ Baixar Gráfico (PNG)
+                        </button>`;
+                }
+            }
+
+            return chart;
+        }
+
+        function baixar_grafico(canvasId) {
+            const chart = charts_ativos[canvasId];
+            if (!chart) return;
+
+            const link = document.createElement('a');
+            link.download = `${canvasId}_${new Date().toISOString().slice(0, 10)}.png`;
+            link.href = chart.toBase64Image();
+            link.click();
+        }
 
         // Inicializar
         window.addEventListener('load', () => {
@@ -686,6 +747,25 @@
                             </div>
                         </div>
                     `;
+
+                    // Gráfico de barras com as principais métricas (tooltip mostra o valor exato ao passar o mouse)
+                    document.getElementById('stats_chart_container').style.display = 'block';
+                    criar_grafico('chart_stats', {
+                        type: 'bar',
+                        data: {
+                            labels: ['Mínimo', 'Q1', 'Mediana', 'Q3', 'Máximo', 'Média'],
+                            datasets: [{
+                                label: coluna,
+                                data: [r.minimo, r.q1, r.mediana, r.q3, r.maximo, r.media],
+                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {y: {beginAtZero: false}}
+                        }
+                    }, 'stats_download');
                 })
                 .catch(error => alert('Erro: ' + error.response.data.erro));
         }
@@ -702,8 +782,7 @@
                     const correlacao = response.data.correlacao;
                     const colunas = Object.keys(correlacao);
                     
-                    const ctx = document.getElementById('chart_correlacao').getContext('2d');
-                    new Chart(ctx, {
+                    criar_grafico('chart_correlacao', {
                         type: 'bubble',
                         data: {
                             labels: colunas,
@@ -712,21 +791,27 @@
                                 data: colunas.map(c => ({
                                     x: colunas.indexOf(c),
                                     y: idx,
-                                    r: Math.abs(correlacao[col][c]) * 10
+                                    r: Math.abs(correlacao[col][c]) * 10,
+                                    corr: correlacao[col][c]
                                 })),
                                 backgroundColor: `rgba(37, 99, 235, ${Math.abs(correlacao[col][colunas[0]]) * 0.7})`
                             }))
                         },
                         options: {
                             plugins: {
-                                legend: {display: false}
+                                legend: {display: false},
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.corr.toFixed(3)}`
+                                    }
+                                }
                             },
                             scales: {
                                 x: {title: {display: true, text: 'Coluna'}},
                                 y: {title: {display: true, text: 'Correlação'}}
                             }
                         }
-                    });
+                    }, 'correlacao_download');
                 })
                 .catch(error => alert('Erro: ' + error.response.data.erro));
         }
@@ -748,8 +833,7 @@
                         labels.push(`${r.limites[i].toFixed(1)}`);
                     }
 
-                    const ctx = document.getElementById('chart_dist').getContext('2d');
-                    new Chart(ctx, {
+                    criar_grafico('chart_dist', {
                         type: 'bar',
                         data: {
                             labels: labels,
@@ -762,13 +846,9 @@
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {beginAtZero: true}
-                            }
+                            scales: {y: {beginAtZero: true}}
                         }
-                    });
+                    }, 'dist_download');
                 })
                 .catch(error => alert('Erro: ' + error.response.data.erro));
         }
@@ -792,8 +872,7 @@
             })
                 .then(response => {
                     const r = response.data;
-                    const ctx = document.getElementById('chart_agr').getContext('2d');
-                    new Chart(ctx, {
+                    criar_grafico('chart_agr', {
                         type: 'bar',
                         data: {
                             labels: r.grupos,
@@ -806,13 +885,9 @@
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {beginAtZero: true}
-                            }
+                            scales: {y: {beginAtZero: true}}
                         }
-                    });
+                    }, 'agr_download');
                 })
                 .catch(error => alert('Erro: ' + error.response.data.erro));
         }
@@ -919,6 +994,37 @@
                             💾 Salvar como Dataset
                         </button>
                     `;
+
+                    // Gráfico de barras com todos os indicadores (escalas diferentes entre si,
+                    // mas o tooltip ao passar o mouse sempre mostra o valor exato com sua unidade)
+                    const entradas = Object.values(perfil).filter(info => info.valor !== null);
+                    document.getElementById('ibge_perfil_chart_container').style.display = 'block';
+                    criar_grafico('chart_ibge_perfil', {
+                        type: 'bar',
+                        data: {
+                            labels: entradas.map(info => info.nome),
+                            datasets: [{
+                                label: nome_municipio,
+                                data: entradas.map(info => info.valor),
+                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {y: {beginAtZero: true}},
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => {
+                                            const info = entradas[ctx.dataIndex];
+                                            return ibge_formatar_valor(info.valor, info.unidade);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }, 'ibge_perfil_download');
                 })
                 .catch(error => {
                     const msg = error.response?.data?.erro || 'Erro ao consultar o perfil do município';
@@ -990,6 +1096,25 @@
                         </div>
                         <button class="btn btn-primary" onclick="ibge_importar()">💾 Salvar como Dataset</button>
                     `;
+
+                    // Gráfico de barras: uma barra por localidade/período, tooltip mostra o valor exato
+                    document.getElementById('ibge_indicador_chart_container').style.display = 'block';
+                    criar_grafico('chart_ibge_indicador', {
+                        type: 'bar',
+                        data: {
+                            labels: dados.map(d => `${d.localidade} (${d.periodo})`),
+                            datasets: [{
+                                label: `${dados[0].indicador} (${dados[0].unidade})`,
+                                data: dados.map(d => d.valor),
+                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {y: {beginAtZero: true}}
+                        }
+                    }, 'ibge_indicador_download');
                 })
                 .catch(error => {
                     const msg = error.response?.data?.erro || 'Erro ao consultar a API do IBGE';
