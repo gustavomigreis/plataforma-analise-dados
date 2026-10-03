@@ -1250,22 +1250,8 @@
                         return;
                     }
 
-                    let tabela = `<table class="table"><thead><tr>
-                        <th>Município</th><th>Valor FOB (US$)</th><th>Peso Líquido (kg)</th><th>Período</th>
-                    </tr></thead><tbody>`;
-                    dados.forEach(d => {
-                        tabela += `<tr>
-                            <td>${d.municipio}</td>
-                            <td>${d.valor_fob_usd !== null && d.valor_fob_usd !== undefined ? d.valor_fob_usd.toLocaleString('pt-BR') : '-'}</td>
-                            <td>${d.peso_liquido_kg !== null && d.peso_liquido_kg !== undefined ? d.peso_liquido_kg.toLocaleString('pt-BR') : '-'}</td>
-                            <td>${d.periodo}</td>
-                        </tr>`;
-                    });
-                    tabela += '</tbody></table>';
-
                     document.getElementById('comex_resultado').innerHTML = `
                         <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
-                        ${tabela}
                         <div class="form-group" style="margin-top: 20px;">
                             <label for="comex_nome_dataset">Nome do Dataset (para salvar)</label>
                             <input type="text" id="comex_nome_dataset" placeholder="Ex: Exportações SC 2023-2024">
