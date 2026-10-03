@@ -441,6 +441,7 @@
             <div class="tabs" style="margin-bottom: 25px;">
                 <button class="tab-button active" id="ibge_submode_perfil_btn" onclick="ibge_abrir_submode('perfil')">🏙️ Perfil do Município</button>
                 <button class="tab-button" id="ibge_submode_indicador_btn" onclick="ibge_abrir_submode('indicador')">🔍 Consulta por Indicador</button>
+                <button class="tab-button" id="ibge_submode_comex_btn" onclick="ibge_abrir_submode('comex')">🚢 Comércio Exterior</button>
             </div>
 
             <!-- SUBMODO: PERFIL DO MUNICÍPIO -->
@@ -502,6 +503,52 @@
                     <canvas id="chart_ibge_indicador"></canvas>
                 </div>
                 <div id="ibge_indicador_download"></div>
+            </div>
+
+            <!-- SUBMODO: COMÉRCIO EXTERIOR -->
+            <div id="ibge_submode_comex" style="display: none;">
+                <p style="color: #6b7280; margin-bottom: 20px; font-size: 13px;">
+                    ⚠️ Fonte: Comex Stat (MDIC). O município considerado é o <strong>domicílio fiscal</strong>
+                    (endereço do CNPJ) da empresa exportadora/importadora, não necessariamente o local de
+                    produção ou embarque da mercadoria.
+                </p>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="comex_fluxo">Fluxo</label>
+                        <select id="comex_fluxo">
+                            <option value="exportacao">Exportações</option>
+                            <option value="importacao">Importações</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="comex_municipio">Município (opcional, deixe em branco para todos de SC)</label>
+                        <select id="comex_municipio">
+                            <option value="">Todos os municípios de SC</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="comex_ano_inicio">Ano Início</label>
+                        <input type="number" id="comex_ano_inicio" value="2023" min="1997" max="2026">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="comex_ano_fim">Ano Fim</label>
+                        <input type="number" id="comex_ano_fim" value="2024" min="1997" max="2026">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="comex_consultar()">🔍 Consultar</button>
+
+                <div id="comex_resultado" style="margin-top: 20px;"></div>
+                <div class="chart-container" id="comex_chart_container" style="display: none;">
+                    <canvas id="chart_comex"></canvas>
+                </div>
+                <div id="comex_download"></div>
             </div>
         </div>
     </div>
@@ -919,7 +966,7 @@
                     document.getElementById('ibge_indicador').innerHTML = '<option>Erro ao carregar indicadores</option>';
                 });
 
-            // Carrega a lista de municípios de SC (usada nos dois submodos)
+            // Carrega a lista de municípios de SC (usada nos três submodos)
             axios.get('/api/ibge/municipios')
                 .then(response => {
                     ibge_municipios_cache = response.data.municipios;
@@ -935,6 +982,15 @@
                             select.appendChild(option);
                         });
                     });
+
+                    // comex_municipio mantém a opção "Todos os municípios" fixa no topo
+                    const select_comex = document.getElementById('comex_municipio');
+                    municipios_ordenados.forEach(m => {
+                        const option = document.createElement('option');
+                        option.value = m.codigo;
+                        option.textContent = m.nome;
+                        select_comex.appendChild(option);
+                    });
                 })
                 .catch(() => {
                     ['ibge_municipio', 'ibge_perfil_municipio'].forEach(select_id => {
@@ -946,8 +1002,10 @@
         function ibge_abrir_submode(modo) {
             document.getElementById('ibge_submode_perfil').style.display = (modo === 'perfil') ? 'block' : 'none';
             document.getElementById('ibge_submode_indicador').style.display = (modo === 'indicador') ? 'block' : 'none';
+            document.getElementById('ibge_submode_comex').style.display = (modo === 'comex') ? 'block' : 'none';
             document.getElementById('ibge_submode_perfil_btn').classList.toggle('active', modo === 'perfil');
             document.getElementById('ibge_submode_indicador_btn').classList.toggle('active', modo === 'indicador');
+            document.getElementById('ibge_submode_comex_btn').classList.toggle('active', modo === 'comex');
         }
 
         function ibge_atualizar_nivel() {
@@ -1139,6 +1197,100 @@
             })
                 .then(response => {
                     document.getElementById('ibge_resultado').innerHTML +=
+                        `<div class="alert alert-success" style="margin-top: 15px;">
+                            ✅ Dataset "${response.data.nome}" salvo com ${response.data.linhas} linha(s)!
+                            Vá para a aba Datasets ou Análise Estatística para explorá-lo.
+                        </div>`;
+                    carregar_datasets();
+                    populate_dataset_selects();
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao salvar o dataset';
+                    alert('Erro: ' + msg);
+                });
+        }
+
+        function comex_consultar() {
+            const fluxo = document.getElementById('comex_fluxo').value;
+            const codigo_municipio = document.getElementById('comex_municipio').value || null;
+            const ano_inicio = document.getElementById('comex_ano_inicio').value;
+            const ano_fim = document.getElementById('comex_ano_fim').value;
+
+            document.getElementById('comex_resultado').innerHTML = '<div class="alert alert-info">⏳ Consultando Comex Stat (MDIC)...</div>';
+
+            axios.post('/api/comex/consultar', {
+                fluxo, ano_inicio, ano_fim, codigo_municipio
+            })
+                .then(response => {
+                    const dados = response.data.dados;
+
+                    if (!dados.length) {
+                        document.getElementById('comex_resultado').innerHTML =
+                            '<div class="alert alert-error">Nenhum dado encontrado para esses parâmetros.</div>';
+                        return;
+                    }
+
+                    let tabela = `<table class="table"><thead><tr>
+                        <th>Município</th><th>Valor FOB (US$)</th><th>Peso Líquido (kg)</th><th>Período</th>
+                    </tr></thead><tbody>`;
+                    dados.forEach(d => {
+                        tabela += `<tr>
+                            <td>${d.municipio}</td>
+                            <td>${d.valor_fob_usd !== null && d.valor_fob_usd !== undefined ? d.valor_fob_usd.toLocaleString('pt-BR') : '-'}</td>
+                            <td>${d.peso_liquido_kg !== null && d.peso_liquido_kg !== undefined ? d.peso_liquido_kg.toLocaleString('pt-BR') : '-'}</td>
+                            <td>${d.periodo}</td>
+                        </tr>`;
+                    });
+                    tabela += '</tbody></table>';
+
+                    document.getElementById('comex_resultado').innerHTML = `
+                        <div class="alert alert-success">✅ ${dados.length} registro(s) encontrado(s)</div>
+                        ${tabela}
+                        <div class="form-group" style="margin-top: 20px;">
+                            <label for="comex_nome_dataset">Nome do Dataset (para salvar)</label>
+                            <input type="text" id="comex_nome_dataset" placeholder="Ex: Exportações SC 2023-2024">
+                        </div>
+                        <button class="btn btn-primary" onclick="comex_importar()">💾 Salvar como Dataset</button>
+                    `;
+
+                    // Gráfico de barras: uma barra por município, tooltip mostra o valor FOB exato
+                    document.getElementById('comex_chart_container').style.display = 'block';
+                    criar_grafico('chart_comex', {
+                        type: 'bar',
+                        data: {
+                            labels: dados.map(d => d.municipio),
+                            datasets: [{
+                                label: `Valor FOB (US$) - ${fluxo === 'exportacao' ? 'Exportações' : 'Importações'}`,
+                                data: dados.map(d => d.valor_fob_usd),
+                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                                borderColor: 'rgba(37, 99, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {y: {beginAtZero: true}}
+                        }
+                    }, 'comex_download');
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao consultar o Comex Stat';
+                    document.getElementById('comex_resultado').innerHTML =
+                        `<div class="alert alert-error">❌ ${msg}</div>`;
+                });
+        }
+
+        function comex_importar() {
+            const fluxo = document.getElementById('comex_fluxo').value;
+            const codigo_municipio = document.getElementById('comex_municipio').value || null;
+            const ano_inicio = document.getElementById('comex_ano_inicio').value;
+            const ano_fim = document.getElementById('comex_ano_fim').value;
+            const nome = document.getElementById('comex_nome_dataset').value;
+
+            axios.post('/api/comex/importar', {
+                fluxo, ano_inicio, ano_fim, codigo_municipio, nome
+            })
+                .then(response => {
+                    document.getElementById('comex_resultado').innerHTML +=
                         `<div class="alert alert-success" style="margin-top: 15px;">
                             ✅ Dataset "${response.data.nome}" salvo com ${response.data.linhas} linha(s)!
                             Vá para a aba Datasets ou Análise Estatística para explorá-lo.

@@ -23,6 +23,36 @@ INDICADORES = {
         'variavel': 37,
         'unidade': 'mil reais',
     },
+    'vab_agropecuaria': {
+        'nome': 'VAB Agropecuária (2021)',
+        'tabela': 5938,
+        'variavel': 513,
+        'unidade': 'mil reais',
+    },
+    'vab_industria': {
+        'nome': 'VAB Indústria (2021)',
+        'tabela': 5938,
+        'variavel': 517,
+        'unidade': 'mil reais',
+    },
+    'vab_servicos': {
+        'nome': 'VAB Serviços (2021)',
+        'tabela': 5938,
+        'variavel': 6575,
+        'unidade': 'mil reais',
+    },
+    'empresas_atuantes': {
+        'nome': 'Empresas e Organizações Atuantes',
+        'tabela': 9509,
+        'variavel': 367,
+        'unidade': 'unidades',
+    },
+    'pessoal_ocupado': {
+        'nome': 'Pessoal Ocupado Total',
+        'tabela': 9509,
+        'variavel': 707,
+        'unidade': 'pessoas',
+    },
 }
 
 # Tabelas usadas para montar o "Perfil do Município" (estilo IBGE Cidades).
@@ -39,6 +69,25 @@ _CLASS_RENDIMENTO = 'c2/6794/c86/95251/c58/95253'  # fixa sexo/cor/idade = Total
 _TABELA_ALFABETIZACAO = 9543  # Censo 2022 - Taxa de alfabetização 15+ anos
 _VAR_ALFABETIZACAO = 2513
 _CLASS_ALFABETIZACAO = 'c2/6794/c86/95251/c287/100362'  # fixa sexo/cor/idade = Total
+
+# PIB setorial (Valor Adicionado Bruto por setor, preços correntes).
+# Mesma tabela do PIB total (5938), mas os VABs setoriais só têm dado
+# consolidado até 2021 (2022/2023 retornam vazio na API no momento).
+_TABELA_PIB = 5938
+_VAR_PIB_TOTAL = 37
+_VAR_VAB_AGROPECUARIA = 513
+_VAR_VAB_INDUSTRIA = 517
+_VAR_VAB_SERVICOS = 6575
+_PERIODO_VAB_SETORIAL = '2021'
+
+# Empresas e estabelecimentos (Cadastro Central de Empresas - CEMPRE)
+_TABELA_CEMPRE = 9509
+_VAR_EMPRESAS_ATUANTES = 367
+_VAR_PESSOAL_OCUPADO = 707
+_VAR_SALARIOS = 662
+
+# Índice de Gini de renda não está disponível no SIDRA em nível de município
+# (confirmado: só existe até UF/Região). Marcado como indisponível no perfil.
 
 # Níveis territoriais aceitos pela API (prefixo "n" + número)
 NIVEIS = {
@@ -198,6 +247,30 @@ def buscar_perfil_municipio(codigo_municipio):
         _TABELA_ALFABETIZACAO, _VAR_ALFABETIZACAO, codigo_municipio, _CLASS_ALFABETIZACAO
     )
     perfil['alfabetizacao'] = {'nome': 'Taxa de Alfabetização (15+ anos)', 'valor': alfabetizacao, 'unidade': '%', 'periodo': periodo_alfa}
+
+    # PIB setorial (Valor Adicionado Bruto por setor) - dados mais recentes consolidados são de 2021
+    vab_agro, periodo_vab = _buscar_valor_unico(_TABELA_PIB, _VAR_VAB_AGROPECUARIA, codigo_municipio, periodo=_PERIODO_VAB_SETORIAL)
+    perfil['vab_agropecuaria'] = {'nome': 'VAB Agropecuária', 'valor': vab_agro, 'unidade': 'mil reais', 'periodo': periodo_vab}
+
+    vab_industria, _ = _buscar_valor_unico(_TABELA_PIB, _VAR_VAB_INDUSTRIA, codigo_municipio, periodo=_PERIODO_VAB_SETORIAL)
+    perfil['vab_industria'] = {'nome': 'VAB Indústria', 'valor': vab_industria, 'unidade': 'mil reais', 'periodo': periodo_vab}
+
+    vab_servicos, _ = _buscar_valor_unico(_TABELA_PIB, _VAR_VAB_SERVICOS, codigo_municipio, periodo=_PERIODO_VAB_SETORIAL)
+    perfil['vab_servicos'] = {'nome': 'VAB Serviços', 'valor': vab_servicos, 'unidade': 'mil reais', 'periodo': periodo_vab}
+
+    # Empresas e estabelecimentos (CEMPRE)
+    empresas, periodo_cempre = _buscar_valor_unico(_TABELA_CEMPRE, _VAR_EMPRESAS_ATUANTES, codigo_municipio)
+    perfil['empresas_atuantes'] = {'nome': 'Empresas e Organizações Atuantes', 'valor': empresas, 'unidade': 'unidades', 'periodo': periodo_cempre}
+
+    pessoal_ocupado, _ = _buscar_valor_unico(_TABELA_CEMPRE, _VAR_PESSOAL_OCUPADO, codigo_municipio)
+    perfil['pessoal_ocupado'] = {'nome': 'Pessoal Ocupado Total', 'valor': pessoal_ocupado, 'unidade': 'pessoas', 'periodo': periodo_cempre}
+
+    salarios, _ = _buscar_valor_unico(_TABELA_CEMPRE, _VAR_SALARIOS, codigo_municipio)
+    perfil['salarios'] = {'nome': 'Salários e Outras Remunerações', 'valor': salarios, 'unidade': 'mil reais', 'periodo': periodo_cempre}
+
+    # Índice de Gini: não existe no SIDRA em nível de município (só até UF/Região).
+    # Marcado explicitamente como indisponível em vez de omitido silenciosamente.
+    perfil['gini'] = {'nome': 'Índice de Gini (Renda)', 'valor': None, 'unidade': '', 'periodo': 'Indisponível no SIDRA para nível municipal'}
 
     return perfil
 

@@ -7,6 +7,7 @@ import json
 
 from db import get_connection, adapt_query, init_db, USE_POSTGRES, last_insert_id
 import ibge
+import comexstat
 
 app = Flask(__name__)
 CORS(app)
@@ -446,6 +447,82 @@ def ibge_importar():
         return jsonify({'erro': str(e)}), 400
     except Exception as e:
         return jsonify({'erro': f'Falha ao importar dados do IBGE: {str(e)}'}), 502
+
+
+@app.route('/api/comex/consultar', methods=['POST'])
+def comex_consultar():
+    """
+    Consulta a API do Comex Stat (MDIC) para exportações/importações por
+    município de Santa Catarina.
+    """
+    data = request.json or {}
+    fluxo = data.get('fluxo')
+    ano_inicio = data.get('ano_inicio')
+    ano_fim = data.get('ano_fim')
+    codigo_municipio = data.get('codigo_municipio')
+
+    try:
+        resultado = comexstat.buscar_comercio_exterior(
+            fluxo, ano_inicio, ano_fim, codigo_municipio
+        )
+        return jsonify({'dados': resultado, 'total': len(resultado)})
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar Comex Stat: {str(e)}'}), 502
+
+
+@app.route('/api/comex/importar', methods=['POST'])
+def comex_importar():
+    """Consulta o Comex Stat e salva o resultado como um dataset na plataforma."""
+    data = request.json or {}
+    fluxo = data.get('fluxo')
+    ano_inicio = data.get('ano_inicio')
+    ano_fim = data.get('ano_fim')
+    codigo_municipio = data.get('codigo_municipio')
+    nome_dataset = data.get('nome')
+
+    try:
+        registros = comexstat.buscar_comercio_exterior(
+            fluxo, ano_inicio, ano_fim, codigo_municipio
+        )
+
+        if not registros:
+            return jsonify({'erro': 'Nenhum dado retornado pelo Comex Stat para esses parâmetros'}), 400
+
+        if not nome_dataset:
+            nome_fluxo = 'Exportações' if fluxo == 'exportacao' else 'Importações'
+            nome_dataset = f'Comex Stat - {nome_fluxo} SC ({ano_inicio}-{ano_fim})'
+
+        conn = get_connection()
+        c = conn.cursor()
+        colunas = ','.join(registros[0].keys())
+
+        if USE_POSTGRES:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (%s, %s, %s, %s) RETURNING id',
+                (nome_dataset, 'Importado da API do Comex Stat (MDIC)', 'comex', colunas)
+            )
+        else:
+            c.execute(
+                'INSERT INTO datasets (nome, descricao, tipo, colunas) VALUES (?, ?, ?, ?)',
+                (nome_dataset, 'Importado da API do Comex Stat (MDIC)', 'comex', colunas)
+            )
+        dataset_id = last_insert_id(c, conn)
+
+        for registro in registros:
+            c.execute(q('INSERT INTO dados (dataset_id, dados_json) VALUES (?, ?)'),
+                      (dataset_id, json.dumps(registro, default=str)))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'sucesso': True, 'dataset_id': dataset_id, 'nome': nome_dataset, 'linhas': len(registros)})
+
+    except ValueError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao importar dados do Comex Stat: {str(e)}'}), 502
 
 
 # Garante que o banco existe tanto rodando com `python app.py`
