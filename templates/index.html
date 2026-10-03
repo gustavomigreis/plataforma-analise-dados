@@ -6,6 +6,9 @@
     <title>Plataforma de Análise de Dados Geográfica e Econômica</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -14,87 +17,190 @@
         }
 
         :root {
-            --primary: #2563eb;
-            --secondary: #1e40af;
-            --success: #059669;
-            --danger: #dc2626;
-            --warning: #f59e0b;
-            --light: #f3f4f6;
-            --dark: #1f2937;
-            --border: #e5e7eb;
+            --preto: #0a0a0a;
+            --preto-suave: #1a1a1a;
+            --vermelho: #c8102e;
+            --vermelho-escuro: #960c22;
+            --branco: #ffffff;
+            --cinza-fundo: #f4f4f4;
+            --cinza-linha: #d9d9d9;
+            --cinza-texto: #5c5c5c;
+            --sucesso: #1a7a3c;
+            --sucesso-fundo: #e8f5ec;
+            --erro: #c8102e;
+            --erro-fundo: #fbe9ec;
+            --info: #1a1a1a;
+            --info-fundo: #eeeeee;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--cinza-fundo);
             min-height: 100vh;
-            color: var(--dark);
+            color: var(--preto);
+            line-height: 1.5;
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0 24px 40px;
         }
 
-        .header {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
+        /* ---------- HERO / CABEÇALHO ---------- */
+        .hero {
+            position: relative;
+            background:
+                linear-gradient(180deg, rgba(10,10,10,0.45) 0%, rgba(10,10,10,0.72) 100%),
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500"><rect width="1200" height="500" fill="%23141414"/><g stroke="%23c8102e" stroke-width="1" opacity="0.8"><path d="M0 60 L1200 20"/><path d="M0 140 L1200 110"/><path d="M0 230 L1200 260"/><path d="M0 330 L1200 300"/><path d="M0 420 L1200 460"/></g><g stroke="%23ffffff" stroke-width="0.7" opacity="0.35"><path d="M100 0 L160 500"/><path d="M340 0 L300 500"/><path d="M620 0 L680 500"/><path d="M860 0 L820 500"/><path d="M1080 0 L1120 500"/></g><g fill="%23ffffff" opacity="0.5"><circle cx="160" cy="80" r="2.5"/><circle cx="420" cy="180" r="2.5"/><circle cx="700" cy="120" r="2.5"/><circle cx="950" cy="260" r="2.5"/><circle cx="1080" cy="340" r="2.5"/><circle cx="280" cy="380" r="2.5"/></g></svg>');
+            background-size: cover;
+            background-position: center;
+            margin: 0 0 0;
+            color: var(--branco);
+        }
+
+        .hero-top {
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .hero-top-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12.5px;
+            letter-spacing: 0.02em;
+            color: rgba(255,255,255,0.75);
+        }
+
+        .hero-top-inner .marca {
+            font-weight: 800;
+            color: var(--branco);
+            letter-spacing: 0.04em;
+        }
+
+        .hero-top-inner .marca span {
+            color: var(--vermelho);
+        }
+
+        .hero-body {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 56px 24px 64px;
+        }
+
+        .hero-eyebrow {
+            display: inline-block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--vermelho);
+            background: rgba(200,16,46,0.12);
+            border: 1px solid rgba(200,16,46,0.5);
+            padding: 5px 12px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
         }
 
-        .header h1 {
-            color: var(--primary);
-            margin-bottom: 5px;
-            font-size: 2em;
+        .hero-body h1 {
+            font-size: clamp(2.1em, 4vw, 3.2em);
+            font-weight: 800;
+            line-height: 1.08;
+            max-width: 14ch;
+            margin-bottom: 16px;
         }
 
-        .header p {
-            color: #6b7280;
+        .hero-body p {
+            font-size: 1.05em;
+            color: rgba(255,255,255,0.78);
+            max-width: 56ch;
         }
 
+        /* ---------- NAVEGAÇÃO (ABAS) ---------- */
         .tabs {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 0;
+            margin: -1px 0 0;
             flex-wrap: wrap;
+            background: var(--preto);
+            border-top: 1px solid rgba(255,255,255,0.12);
         }
 
         .tab-button {
-            background: white;
-            border: 2px solid var(--border);
-            padding: 12px 20px;
-            border-radius: 8px;
+            background: transparent;
+            color: rgba(255,255,255,0.68);
+            border: none;
+            border-right: 1px solid rgba(255,255,255,0.12);
+            padding: 16px 22px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
+            font-family: inherit;
+            font-size: 13.5px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            transition: background 0.15s, color 0.15s;
         }
 
         .tab-button:hover {
-            border-color: var(--primary);
-            color: var(--primary);
+            background: rgba(255,255,255,0.06);
+            color: var(--branco);
         }
 
         .tab-button.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
+            background: var(--vermelho);
+            color: var(--branco);
+        }
+
+        .content-wrap {
+            padding-top: 32px;
+        }
+
+        .subtabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+
+        .subtab-button {
+            background: var(--branco);
+            color: var(--preto);
+            border: 2px solid var(--cinza-linha);
+            border-radius: 0;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13.5px;
+            font-weight: 600;
+            transition: border-color 0.15s, background 0.15s, color 0.15s;
+        }
+
+        .subtab-button:hover {
+            border-color: var(--preto);
+        }
+
+        .subtab-button.active {
+            background: var(--preto);
+            color: var(--branco);
+            border-color: var(--preto);
         }
 
         .tab-content {
             display: none;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: var(--branco);
+            padding: 36px;
+            border: 1px solid var(--cinza-linha);
         }
 
         .tab-content.active {
             display: block;
+        }
+
+        .tab-content h2 {
+            font-size: 1.5em;
+            font-weight: 800;
+            margin-bottom: 6px;
+            padding-bottom: 16px;
+            border-bottom: 3px solid var(--preto);
         }
 
         .form-group {
@@ -104,150 +210,157 @@
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--dark);
+            font-weight: 600;
+            font-size: 13.5px;
+            color: var(--preto);
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            padding: 11px 12px;
+            border: 1px solid var(--cinza-linha);
+            border-radius: 0;
             font-size: 14px;
             font-family: inherit;
+            background: var(--branco);
+            color: var(--preto);
         }
 
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            border-color: var(--preto);
+            box-shadow: 0 0 0 3px rgba(10,10,10,0.08);
         }
 
         .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
+            padding: 11px 22px;
+            border: 2px solid var(--preto);
+            border-radius: 0;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
+            font-family: inherit;
+            font-size: 13.5px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
 
         .btn-primary {
-            background: var(--primary);
-            color: white;
+            background: var(--preto);
+            color: var(--branco);
         }
 
         .btn-primary:hover {
-            background: var(--secondary);
+            background: var(--vermelho);
+            border-color: var(--vermelho);
         }
 
         .btn-secondary {
-            background: var(--light);
-            color: var(--dark);
-            border: 1px solid var(--border);
+            background: var(--branco);
+            color: var(--preto);
+            border: 2px solid var(--cinza-linha);
         }
 
         .btn-secondary:hover {
-            background: var(--border);
+            border-color: var(--preto);
         }
 
         .dropzone {
-            border: 2px dashed var(--primary);
-            border-radius: 8px;
+            border: 2px dashed var(--cinza-linha);
             padding: 40px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s;
-            background: #f0f9ff;
+            transition: all 0.2s;
+            background: var(--cinza-fundo);
         }
 
-        .dropzone:hover {
-            background: #e0f2fe;
-            border-color: var(--secondary);
-        }
-
+        .dropzone:hover,
         .dropzone.dragover {
-            background: #e0f2fe;
-            border-color: var(--secondary);
+            background: var(--info-fundo);
+            border-color: var(--preto);
         }
 
         .table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            font-size: 14px;
         }
 
         .table th {
-            background: var(--light);
+            background: var(--preto);
+            color: var(--branco);
             padding: 12px;
             text-align: left;
             font-weight: 600;
-            border-bottom: 2px solid var(--border);
+            font-size: 12.5px;
+            letter-spacing: 0.02em;
         }
 
         .table td {
             padding: 12px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--cinza-linha);
         }
 
         .table tr:hover {
-            background: var(--light);
+            background: var(--cinza-fundo);
         }
 
         .alert {
-            padding: 12px 16px;
-            border-radius: 6px;
+            padding: 13px 16px;
+            border-left: 4px solid;
             margin-bottom: 20px;
+            font-size: 14px;
         }
 
         .alert-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #6ee7b7;
+            background: var(--sucesso-fundo);
+            color: var(--sucesso);
+            border-color: var(--sucesso);
         }
 
         .alert-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
+            background: var(--erro-fundo);
+            color: var(--erro);
+            border-color: var(--erro);
         }
 
         .alert-info {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #93c5fd;
+            background: var(--info-fundo);
+            color: var(--preto);
+            border-color: var(--preto);
         }
 
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            gap: 1px;
             margin-bottom: 20px;
+            background: var(--cinza-linha);
+            border: 1px solid var(--cinza-linha);
         }
 
         .stat-card {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white;
+            background: var(--branco);
+            color: var(--preto);
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-top: 3px solid var(--vermelho);
         }
 
         .stat-card h3 {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 8px;
-            text-transform: uppercase;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: var(--cinza-texto);
+            margin-bottom: 10px;
+            letter-spacing: 0.02em;
         }
 
         .stat-card .value {
-            font-size: 28px;
-            font-weight: bold;
+            font-size: 26px;
+            font-weight: 800;
         }
 
         .chart-container {
@@ -266,29 +379,52 @@
             .grid-2 {
                 grid-template-columns: 1fr;
             }
-            .header h1 {
-                font-size: 1.5em;
+            .hero-body h1 {
+                font-size: 1.7em;
+            }
+            .tab-button {
+                padding: 13px 16px;
+                font-size: 12.5px;
+            }
+            .hero-top-inner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            .hero-body {
+                padding: 40px 20px 44px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📊 Plataforma de Análise de Dados</h1>
-            <p>Análise Geográfica, Econômica e Social</p>
+    <div class="hero">
+        <div class="hero-top">
+            <div class="hero-top-inner">
+                <span class="marca">LABEUR <span>/</span> UFSC</span>
+                <span>Dados geográficos, econômicos e sociais</span>
+            </div>
+        </div>
+        <div class="hero-body">
+            <span class="hero-eyebrow">Plataforma de Análise de Dados</span>
+            <h1>Geografia, economia e sociedade em números</h1>
+            <p>Reúne, cruza e visualiza dados oficiais do IBGE, Comex Stat e Banco Central para Santa Catarina — do Brasil ao município.</p>
         </div>
 
         <div class="tabs">
-            <button class="tab-button active" onclick="abrir_aba('upload')">📤 Upload</button>
-            <button class="tab-button" onclick="abrir_aba('datasets')">📁 Datasets</button>
-            <button class="tab-button" onclick="abrir_aba('estatistica')">📈 Estatística</button>
-            <button class="tab-button" onclick="abrir_aba('correlacao')">🔗 Correlação</button>
-            <button class="tab-button" onclick="abrir_aba('distribuicao')">📊 Distribuição</button>
-            <button class="tab-button" onclick="abrir_aba('agrupamento')">🏷️ Agrupamento</button>
-            <button class="tab-button" onclick="abrir_aba('ibge')">🏛️ Dados do IBGE</button>
-            <button class="tab-button" onclick="abrir_aba('bcb')">📊 Indicadores Macro (BCB)</button>
+            <button class="tab-button active" onclick="abrir_aba('upload')">Upload</button>
+            <button class="tab-button" onclick="abrir_aba('datasets')">Datasets</button>
+            <button class="tab-button" onclick="abrir_aba('estatistica')">Estatística</button>
+            <button class="tab-button" onclick="abrir_aba('correlacao')">Correlação</button>
+            <button class="tab-button" onclick="abrir_aba('distribuicao')">Distribuição</button>
+            <button class="tab-button" onclick="abrir_aba('agrupamento')">Agrupamento</button>
+            <button class="tab-button" onclick="abrir_aba('ibge')">Dados do IBGE</button>
+            <button class="tab-button" onclick="abrir_aba('bcb')">Indicadores Macro (BCB)</button>
         </div>
+    </div>
+
+    <div class="container">
+        <div class="content-wrap">
 
         <!-- ABA: UPLOAD -->
         <div id="upload" class="tab-content active">
@@ -297,7 +433,7 @@
                 <label>Arraste o arquivo aqui ou clique para selecionar</label>
                 <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
                     <p>📎 CSV ou Excel (.xlsx)</p>
-                    <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Clique ou arraste arquivos aqui</p>
+                    <p style="font-size: 12px; color: var(--cinza-texto); margin-top: 10px;">Clique ou arraste arquivos aqui</p>
                 </div>
                 <input type="file" id="fileInput" style="display: none;" accept=".csv,.xlsx,.xls" onchange="handle_file">
             </div>
@@ -434,15 +570,15 @@
         <!-- ABA: DADOS DO IBGE -->
         <div id="ibge" class="tab-content">
             <h2>Dados do IBGE</h2>
-            <p style="color: #6b7280; margin-bottom: 20px;">
+            <p style="color: var(--cinza-texto); margin-bottom: 20px;">
                 Consulte dados oficiais direto da API do IBGE/SIDRA e importe como dataset
                 para usar nas ferramentas de análise.
             </p>
 
-            <div class="tabs" style="margin-bottom: 25px;">
-                <button class="tab-button active" id="ibge_submode_perfil_btn" onclick="ibge_abrir_submode('perfil')">🏙️ Perfil do Município</button>
-                <button class="tab-button" id="ibge_submode_indicador_btn" onclick="ibge_abrir_submode('indicador')">🔍 Consulta por Indicador</button>
-                <button class="tab-button" id="ibge_submode_comex_btn" onclick="ibge_abrir_submode('comex')">🚢 Comércio Exterior</button>
+            <div class="subtabs">
+                <button class="subtab-button active" id="ibge_submode_perfil_btn" onclick="ibge_abrir_submode('perfil')">Perfil do Município</button>
+                <button class="subtab-button" id="ibge_submode_indicador_btn" onclick="ibge_abrir_submode('indicador')">Consulta por Indicador</button>
+                <button class="subtab-button" id="ibge_submode_comex_btn" onclick="ibge_abrir_submode('comex')">Comércio Exterior</button>
             </div>
 
             <!-- SUBMODO: PERFIL DO MUNICÍPIO -->
@@ -508,7 +644,7 @@
 
             <!-- SUBMODO: COMÉRCIO EXTERIOR -->
             <div id="ibge_submode_comex" style="display: none;">
-                <p style="color: #6b7280; margin-bottom: 20px; font-size: 13px;">
+                <p style="color: var(--cinza-texto); margin-bottom: 20px; font-size: 13px;">
                     ⚠️ Fonte: Comex Stat (MDIC). O município considerado é o <strong>domicílio fiscal</strong>
                     (endereço do CNPJ) da empresa exportadora/importadora, não necessariamente o local de
                     produção ou embarque da mercadoria.
@@ -556,7 +692,7 @@
         <!-- ABA: INDICADORES MACRO (BCB) -->
         <div id="bcb" class="tab-content">
             <h2>Indicadores Macroeconômicos (Banco Central do Brasil)</h2>
-            <p style="color: #6b7280; margin-bottom: 20px;">
+            <p style="color: var(--cinza-texto); margin-bottom: 20px;">
                 Consulte séries históricas direto da API SGS do Banco Central (Selic, inflação,
                 câmbio e dívida pública) e importe como dataset para usar nas ferramentas de análise.
             </p>
@@ -582,6 +718,7 @@
                 <canvas id="chart_bcb"></canvas>
             </div>
             <div id="bcb_download"></div>
+        </div>
         </div>
     </div>
 
@@ -837,8 +974,8 @@
                             datasets: [{
                                 label: coluna,
                                 data: [r.minimo, r.q1, r.mediana, r.q3, r.maximo, r.media],
-                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.85)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 1
                             }]
                         },
@@ -874,7 +1011,7 @@
                                     r: Math.abs(correlacao[col][c]) * 10,
                                     corr: correlacao[col][c]
                                 })),
-                                backgroundColor: `rgba(37, 99, 235, ${Math.abs(correlacao[col][colunas[0]]) * 0.7})`
+                                backgroundColor: `rgba(200, 16, 46, ${Math.abs(correlacao[col][colunas[0]]) * 0.7})`
                             }))
                         },
                         options: {
@@ -920,8 +1057,8 @@
                             datasets: [{
                                 label: coluna,
                                 data: r.contagens,
-                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.85)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 1
                             }]
                         },
@@ -1097,8 +1234,8 @@
                             datasets: [{
                                 label: nome_municipio,
                                 data: entradas.map(info => info.valor),
-                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.85)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 1
                             }]
                         },
@@ -1182,8 +1319,8 @@
                             datasets: [{
                                 label: `${dados[0].indicador} (${dados[0].unidade})`,
                                 data: dados.map(d => d.valor),
-                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.12)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 2,
                                 fill: true,
                                 tension: 0.2
@@ -1268,8 +1405,8 @@
                             datasets: [{
                                 label: `Valor FOB (US$) - ${fluxo === 'exportacao' ? 'Exportações' : 'Importações'}`,
                                 data: dados.map(d => d.valor_fob_usd),
-                                backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.85)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 1
                             }]
                         },
@@ -1361,8 +1498,8 @@
                             datasets: [{
                                 label: `${dados[0].indicador} (${dados[0].unidade})`,
                                 data: dados.map(d => d.valor),
-                                backgroundColor: 'rgba(37, 99, 235, 0.2)',
-                                borderColor: 'rgba(37, 99, 235, 1)',
+                                backgroundColor: 'rgba(200, 16, 46, 0.12)',
+                                borderColor: 'rgba(10, 10, 10, 1)',
                                 borderWidth: 2,
                                 fill: true,
                                 tension: 0.2
