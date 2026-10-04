@@ -1500,17 +1500,93 @@
             return {chartConfig, avisoTruncamento};
         }
 
-        function pesquisa_montar_tabela_html(serie) {
-            let tabelaHtml = '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
-            serie.slice(0, 500).forEach(item => {
+        // Guarda a série completa de cada tabela renderizada (por detalheId),
+        // para a busca/ordenação filtrar em TODOS os registros (não só nos
+        // primeiros 500 exibidos) e para o botão "Baixar CSV completo" poder
+        // gerar o arquivo com todas as localidades, mesmo quando há milhares
+        // (ex: "(Todos)" os municípios do Brasil sem filtro) - a tabela
+        // sozinha nunca é um jeito prático de achar/conferir uma localidade
+        // específica nesse volume.
+        let pesquisa_series_tabela_cache = {};
+
+        // Monta as linhas (<tr>) da tabela a partir de uma série já ordenada
+        // e filtrada, limitando a exibição em tela a 500 linhas por vez
+        // (performance do navegador) - mas o CSV e a busca sempre operam
+        // sobre a série completa guardada em pesquisa_series_tabela_cache.
+        function _pesquisa_linhas_tabela(serieExibida) {
+            return serieExibida.slice(0, 500).map(item => {
                 const valor = (item.valor === null || item.valor === undefined) ? '-' : item.valor.toLocaleString('pt-BR');
-                tabelaHtml += `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
-            });
-            tabelaHtml += '</tbody></table>';
-            if (serie.length > 500) {
-                tabelaHtml += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 500 de ${serie.length} registros.</p>`;
+                return `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
+            }).join('');
+        }
+
+        function pesquisa_montar_tabela_html(serie, detalheId) {
+            pesquisa_series_tabela_cache[detalheId] = serie;
+
+            const temMuitasLocalidades = new Set(serie.map(s => s.localidade)).size > 1;
+            const buscaHtml = temMuitasLocalidades ? `
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+                    <input type="text" placeholder="Buscar localidade..." id="${detalheId}_busca"
+                        oninput="pesquisa_filtrar_tabela('${detalheId}')"
+                        style="flex: 1 1 220px; padding: 6px 10px; border: 1px solid var(--cinza-borda, #ccc); border-radius: 4px; font-size: 13px;">
+                    <button class="btn btn-secondary" onclick="pesquisa_baixar_csv_tabela('${detalheId}')" style="font-size: 13px; padding: 6px 12px;">
+                        ⬇️ Baixar CSV completo (${serie.length} registros)
+                    </button>
+                </div>` : '';
+
+            return `<div id="${detalheId}_busca_container">${buscaHtml}</div>
+                <div id="${detalheId}_tabela_wrap">${_pesquisa_tabela_com_contagem(serie, serie.length)}</div>`;
+        }
+
+        function _pesquisa_tabela_com_contagem(serieExibida, totalReal) {
+            let html = '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
+            html += _pesquisa_linhas_tabela(serieExibida);
+            html += '</tbody></table>';
+            if (totalReal > 500) {
+                html += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 500 de ${totalReal} registros${serieExibida.length !== totalReal ? ' encontrados' : ''}. Refine a busca ou baixe o CSV completo para ver todos.</p>`;
             }
-            return tabelaHtml;
+            return html;
+        }
+
+        // Filtra a tabela pelo texto digitado, em TODA a série guardada em
+        // cache (não só nas 500 linhas exibidas) - essencial para achar um
+        // município específico dentro de milhares sem precisar rolar nem
+        // baixar nada.
+        function pesquisa_filtrar_tabela(detalheId) {
+            const termo = (document.getElementById(`${detalheId}_busca`).value || '').toLocaleLowerCase('pt-BR');
+            const serieCompleta = pesquisa_series_tabela_cache[detalheId] || [];
+            const filtrada = termo
+                ? serieCompleta.filter(item => String(item.localidade).toLocaleLowerCase('pt-BR').includes(termo))
+                : serieCompleta;
+            document.getElementById(`${detalheId}_tabela_wrap`).innerHTML = _pesquisa_tabela_com_contagem(filtrada, filtrada.length);
+        }
+
+        // Gera e baixa um CSV com TODOS os registros da série (não limitado
+        // a 500) - a única forma prática de levar os dados de milhares de
+        // municípios para fora da tela (ex: Excel) quando a tabela na
+        // própria página não comporta mostrar tudo de uma vez.
+        function pesquisa_baixar_csv_tabela(detalheId) {
+            const serie = pesquisa_series_tabela_cache[detalheId] || [];
+            if (!serie.length) return;
+
+            const escapar = (valor) => {
+                const texto = String(valor ?? '');
+                return /[",\n;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+            };
+            const linhas = ['Localidade,Período,Valor'];
+            serie.forEach(item => {
+                const valor = (item.valor === null || item.valor === undefined) ? '' : item.valor;
+                linhas.push([escapar(item.localidade), escapar(item.periodo), escapar(valor)].join(','));
+            });
+            // BOM UTF-8 no início - sem isso o Excel no Windows abre
+            // acentos/cedilhas de nomes de município corrompidos.
+            const conteudo = '﻿' + linhas.join('\n');
+            const blob = new Blob([conteudo], {type: 'text/csv;charset=utf-8;'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${detalheId}_dados_completos.csv`;
+            link.click();
+            URL.revokeObjectURL(link.href);
         }
 
         // Re-renderiza o gráfico e a tabela de um bloco já existente,
@@ -1530,7 +1606,7 @@
             const detalhesEl = document.getElementById(`${canvasId}_detalhe`);
             if (detalhesEl) {
                 detalhesEl.querySelector('summary').textContent = `Ver dados (${serie.length} registro${serie.length === 1 ? '' : 's'})`;
-                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serie);
+                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serie, canvasId);
             }
         }
 
@@ -1570,7 +1646,7 @@
                     </div>`;
             }
 
-            const tabelaHtml = pesquisa_montar_tabela_html(serieInicial);
+            const tabelaHtml = pesquisa_montar_tabela_html(serieInicial, canvasId);
 
             bloco.innerHTML = `
                 <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
@@ -1737,7 +1813,7 @@
             const detalhesEl = document.getElementById(`${blocoId}_detalhe`);
             if (detalhesEl) {
                 detalhesEl.querySelector('summary').textContent = `Ver dados (${serieParaTabela.length} registro${serieParaTabela.length === 1 ? '' : 's'})`;
-                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serieParaTabela);
+                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serieParaTabela, blocoId);
             }
         }
 
@@ -1758,7 +1834,7 @@
             const serieSoma = pesquisa_somar_series_categorias(resultados);
             const {chartConfig, avisoTruncamento} = pesquisa_montar_chart_config(nomeTotal, serieSoma);
             const canvasId = `${blocoId}_canvas`;
-            const tabelaHtml = pesquisa_montar_tabela_html(serieSoma);
+            const tabelaHtml = pesquisa_montar_tabela_html(serieSoma, blocoId);
 
             const bloco = document.createElement('div');
             bloco.id = blocoId;
