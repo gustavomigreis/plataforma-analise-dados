@@ -262,66 +262,258 @@
             display: block;
         }
 
-        /* Aba Início - caixas de busca com autocomplete para território e tema */
-        .inicio-autocomplete-lista {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            z-index: 20;
-            background: var(--branco);
+        /* ---------- ABA INÍCIO - console de busca (território + tema) ----------
+           Inspirado no SIDRA/Painel do IBGE e no Ipeadata: dois painéis com
+           numeração, campo de busca e uma lista de resultados SEMPRE visível
+           abaixo (não um overlay flutuante) que se atualiza a cada tecla -
+           o usuário vê o universo de opções (destaques) mesmo antes de digitar. */
+        .inicio-intro {
+            display: flex;
+            align-items: baseline;
+            gap: 14px;
+            padding-bottom: 18px;
+            margin-bottom: 28px;
+            border-bottom: 3px solid var(--preto);
+        }
+
+        .inicio-intro .num-passo-total {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--cinza-texto);
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+
+        .inicio-paineis {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--cinza-linha);
             border: 1px solid var(--cinza-linha);
-            border-top: none;
-            max-height: 320px;
+        }
+
+        @media (max-width: 760px) {
+            .inicio-paineis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .inicio-painel {
+            background: var(--branco);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .inicio-painel-cabecalho {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--cinza-linha);
+        }
+
+        .inicio-painel-numero {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            flex-shrink: 0;
+            background: var(--preto);
+            color: var(--branco);
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .inicio-painel.concluido .inicio-painel-numero {
+            background: var(--vermelho);
+        }
+
+        .inicio-painel-titulo {
+            font-size: 13.5px;
+            font-weight: 700;
+        }
+
+        .inicio-painel-titulo span {
+            display: block;
+            font-weight: 400;
+            font-size: 12px;
+            color: var(--cinza-texto);
+            margin-top: 1px;
+        }
+
+        .inicio-painel-busca {
+            position: relative;
+            padding: 16px 20px 0;
+        }
+
+        .inicio-painel-busca input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid var(--cinza-linha);
+            font-size: 14px;
+            font-family: inherit;
+            background: var(--cinza-fundo);
+            color: var(--preto);
+        }
+
+        .inicio-painel-busca input:focus {
+            outline: none;
+            border-color: var(--preto);
+            background: var(--branco);
+            box-shadow: 0 0 0 3px rgba(10,10,10,0.08);
+        }
+
+        .inicio-painel-contagem {
+            padding: 10px 20px 4px;
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--cinza-texto);
+        }
+
+        .inicio-autocomplete-lista {
+            flex: 1;
+            margin: 0 20px 20px;
+            border: 1px solid var(--cinza-linha);
+            max-height: 300px;
             overflow-y: auto;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
         }
 
         .inicio-autocomplete-item {
-            padding: 10px 14px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 11px 14px;
             cursor: pointer;
             font-size: 13.5px;
             border-bottom: 1px solid var(--cinza-linha);
+            transition: background 0.1s;
         }
 
         .inicio-autocomplete-item:last-child {
             border-bottom: none;
         }
 
+        .inicio-autocomplete-item .rotulo {
+            font-weight: 600;
+        }
+
         .inicio-autocomplete-item:hover,
         .inicio-autocomplete-item.destacado {
-            background: #f5f5f5;
+            background: var(--cinza-fundo);
+        }
+
+        .inicio-autocomplete-item:hover .rotulo,
+        .inicio-autocomplete-item.destacado .rotulo {
+            color: var(--vermelho);
+        }
+
+        .inicio-autocomplete-item .tipo-etiqueta {
+            flex-shrink: 0;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--cinza-texto);
+            border: 1px solid var(--cinza-linha);
+            padding: 2px 6px;
+            white-space: nowrap;
         }
 
         .inicio-autocomplete-item .sub {
+            display: block;
             color: var(--cinza-texto);
             font-size: 12px;
+            margin-top: 2px;
         }
 
         .inicio-autocomplete-vazio {
-            padding: 10px 14px;
+            padding: 24px 14px;
+            text-align: center;
             color: var(--cinza-texto);
             font-size: 13px;
         }
 
         .inicio-escolhido {
-            margin-top: 8px;
-            padding: 10px 14px;
-            background: #f5f5f5;
-            border: 1px solid var(--cinza-linha);
+            margin: 16px 20px 20px;
+            padding: 14px 16px;
+            background: var(--preto);
+            color: var(--branco);
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            font-size: 13.5px;
+        }
+
+        .inicio-escolhido .rotulo-principal {
+            font-size: 14.5px;
+            font-weight: 700;
+        }
+
+        .inicio-escolhido .rotulo-sub {
+            display: block;
+            font-size: 12px;
+            color: rgba(255,255,255,0.65);
+            margin-top: 2px;
+            font-weight: 400;
         }
 
         .inicio-escolhido .trocar {
-            color: var(--vermelho);
+            flex-shrink: 0;
+            color: var(--branco);
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.4);
             cursor: pointer;
-            font-size: 12.5px;
+            padding: 6px 12px;
+            font-size: 12px;
             font-weight: 600;
+            font-family: inherit;
             white-space: nowrap;
+            transition: border-color 0.15s;
+        }
+
+        .inicio-escolhido .trocar:hover {
+            border-color: var(--branco);
+        }
+
+        .inicio-acao {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid var(--cinza-linha);
+        }
+
+        .inicio-acao .btn-primary:disabled {
+            background: var(--cinza-linha);
+            color: var(--cinza-texto);
+            cursor: default;
+        }
+
+        #inicio_aviso {
+            color: var(--cinza-texto);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .inicio-atalho {
+            margin-top: 18px;
+        }
+
+        .inicio-atalho a {
+            color: var(--cinza-texto);
+            font-size: 13px;
+            text-decoration: none;
+            border-bottom: 1px solid var(--cinza-linha);
+        }
+
+        .inicio-atalho a:hover {
+            color: var(--preto);
+            border-color: var(--preto);
         }
 
         .tab-content h2 {
@@ -692,43 +884,54 @@
 
         <!-- ABA: INÍCIO (ponto de entrada - duas buscas: território e tema) -->
         <div id="inicio" class="tab-content active">
-            <h2>O que você quer consultar?</h2>
-            <p style="color: var(--cinza-texto); margin-top: -8px; margin-bottom: 28px;">
-                Busque a unidade territorial (município, estado ou região) e o tema ou indicador que lhe interessam.
-                Ao escolher os dois, levamos direto para o resultado na Base de Pesquisa.
-            </p>
+            <div class="inicio-intro">
+                <h2 style="border: none; padding: 0; margin: 0;">O que você quer consultar?</h2>
+                <span class="num-passo-total">2 ETAPAS</span>
+            </div>
 
-            <div class="grid-2" style="gap: 24px; align-items: start;">
-                <div class="form-group" style="position: relative;">
-                    <label for="inicio_busca_territorio">1. Unidade territorial</label>
-                    <input type="text" id="inicio_busca_territorio" autocomplete="off"
-                        placeholder="Digite um município, estado ou região..."
-                        oninput="inicio_buscar_territorio(this.value)"
-                        onfocus="inicio_buscar_territorio(this.value)">
+            <div class="inicio-paineis">
+                <div class="inicio-painel" id="inicio_painel_territorio">
+                    <div class="inicio-painel-cabecalho">
+                        <span class="inicio-painel-numero">1</span>
+                        <span class="inicio-painel-titulo">Unidade territorial<span>Município, estado ou região</span></span>
+                    </div>
+                    <div class="inicio-painel-busca">
+                        <input type="text" id="inicio_busca_territorio" autocomplete="off"
+                            placeholder="Ex: Florianópolis, Santa Catarina, Itajaí..."
+                            oninput="inicio_buscar_territorio(this.value)"
+                            onfocus="inicio_buscar_territorio(this.value)">
+                    </div>
+                    <div id="inicio_territorio_contagem" class="inicio-painel-contagem"></div>
                     <div id="inicio_territorio_resultados" class="inicio-autocomplete-lista"></div>
                     <div id="inicio_territorio_escolhido" class="inicio-escolhido" style="display: none;"></div>
                 </div>
 
-                <div class="form-group" style="position: relative;">
-                    <label for="inicio_busca_tema">2. Tema ou indicador</label>
-                    <input type="text" id="inicio_busca_tema" autocomplete="off"
-                        placeholder="Digite um indicador, ex: população, exportações, PIB..."
-                        oninput="inicio_buscar_tema(this.value)"
-                        onfocus="inicio_buscar_tema(this.value)">
+                <div class="inicio-painel" id="inicio_painel_tema">
+                    <div class="inicio-painel-cabecalho">
+                        <span class="inicio-painel-numero">2</span>
+                        <span class="inicio-painel-titulo">Tema ou indicador<span>População, exportações, PIB...</span></span>
+                    </div>
+                    <div class="inicio-painel-busca">
+                        <input type="text" id="inicio_busca_tema" autocomplete="off"
+                            placeholder="Ex: população, exportações, PIB, rebanho..."
+                            oninput="inicio_buscar_tema(this.value)"
+                            onfocus="inicio_buscar_tema(this.value)">
+                    </div>
+                    <div id="inicio_tema_contagem" class="inicio-painel-contagem"></div>
                     <div id="inicio_tema_resultados" class="inicio-autocomplete-lista"></div>
                     <div id="inicio_tema_escolhido" class="inicio-escolhido" style="display: none;"></div>
                 </div>
             </div>
 
-            <button class="btn btn-primary" id="inicio_botao_ver" onclick="inicio_ver_resultado()" disabled style="margin-top: 24px;">
-                Ver resultado
-            </button>
-            <p id="inicio_aviso" style="color: var(--cinza-texto); font-size: 13px; margin-top: 10px;">
-                Escolha uma unidade territorial e um tema para continuar.
-            </p>
+            <div class="inicio-acao">
+                <button class="btn btn-primary" id="inicio_botao_ver" onclick="inicio_ver_resultado()" disabled>
+                    Ver resultado
+                </button>
+                <p id="inicio_aviso">Escolha uma unidade territorial e um tema para continuar.</p>
+            </div>
 
-            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--cinza-linha);">
-                <a href="#" onclick="inicio_ir_para_pesquisa(); return false;" style="color: var(--cinza-texto); font-size: 13px; text-decoration: underline;">
+            <div class="inicio-atalho">
+                <a href="#" onclick="inicio_ir_para_pesquisa(); return false;">
                     Prefiro ir direto para a Base de Pesquisa (escolher vários indicadores e filtros de uma vez)
                 </a>
             </div>
@@ -1160,10 +1363,18 @@
         let pesquisa_municipios_brasil_cache = [];
 
         function pesquisa_inicializar() {
+            // Lista de destaque da aba Início já aparece com "carregando..."
+            // antes das respostas chegarem (ver inicio_buscar_territorio/tema).
+            inicio_buscar_territorio('');
+            inicio_buscar_tema('');
+
             axios.get('/api/objetos')
                 .then(response => {
                     pesquisa_catalogo_cache = response.data.objetos;
                     pesquisa_renderizar_objetos();
+                    // Catálogo chegou: atualiza a lista de destaque da aba
+                    // Início (ou o filtro, se o usuário já tiver digitado algo).
+                    inicio_buscar_tema(document.getElementById('inicio_busca_tema').value);
                 })
                 .catch(() => {
                     document.getElementById('pesquisa_objetos_lista').innerHTML =
@@ -1174,6 +1385,9 @@
                 .then(response => {
                     pesquisa_municipios_brasil_cache = response.data.municipios;
                     pesquisa_popular_filtros_localidade();
+                    // Lista de municípios chegou: mesma atualização para o
+                    // painel de território da aba Início.
+                    inicio_buscar_territorio(document.getElementById('inicio_busca_territorio').value);
                 })
                 .catch(() => {
                     const select = document.getElementById('pesquisa_municipio');
@@ -1207,23 +1421,57 @@
             }
         }
 
+        const INICIO_ETIQUETA_TIPO_TERRITORIO = {municipio: 'Município', uf: 'Estado', regiao: 'Região'};
+
+        // Desenha a lista de território (sempre visível - não é mais um
+        // overlay flutuante) e a contagem de resultados acima dela.
+        function _inicio_renderizar_lista_territorio(resultados, destaque) {
+            const lista = document.getElementById('inicio_territorio_resultados');
+            const contagem = document.getElementById('inicio_territorio_contagem');
+            lista.style.display = '';
+
+            if (!resultados.length) {
+                contagem.textContent = '';
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhuma localidade encontrada para esse termo.</div>';
+                lista.dataset.resultados = '[]';
+                return;
+            }
+
+            contagem.textContent = destaque
+                ? `Sugestões · ${resultados.length} de ${pesquisa_municipios_brasil_cache.length} municípios no catálogo`
+                : `${resultados.length} resultado${resultados.length === 1 ? '' : 's'}`;
+
+            lista.innerHTML = resultados.map((r, i) => `
+                <div class="inicio-autocomplete-item" onclick="inicio_escolher_territorio(${i})">
+                    <span><span class="rotulo">${r.rotulo}</span><span class="sub">${r.sub}</span></span>
+                    <span class="tipo-etiqueta">${INICIO_ETIQUETA_TIPO_TERRITORIO[r.tipo] || r.tipo}</span>
+                </div>`).join('');
+            lista.dataset.resultados = JSON.stringify(resultados);
+        }
+
         // Busca território: junta município, UF e região intermediária/
         // imediata num só resultado, a partir do cache de municípios já
         // carregado para a Base de Pesquisa (pesquisa_municipios_brasil_cache)
         // - sem nova chamada à API. Resultado é um "tipo" que, ao ser
         // escolhido, diz à Base de Pesquisa qual escala e filtro usar.
+        // Sem termo digitado, mostra uma amostra de municípios como ponto de
+        // partida (a lista nunca fica vazia/escondida).
         function inicio_buscar_territorio(termo) {
-            const lista = document.getElementById('inicio_territorio_resultados');
             const termoBusca = (termo || '').trim().toLocaleLowerCase('pt-BR');
 
-            if (!termoBusca) {
-                lista.innerHTML = '';
-                lista.style.display = 'none';
+            if (!pesquisa_municipios_brasil_cache.length) {
+                document.getElementById('inicio_territorio_contagem').textContent = '';
+                document.getElementById('inicio_territorio_resultados').innerHTML =
+                    '<div class="inicio-autocomplete-vazio">Carregando lista de municípios...</div>';
                 return;
             }
-            if (!pesquisa_municipios_brasil_cache.length) {
-                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Carregando lista de municípios...</div>';
-                lista.style.display = '';
+
+            if (!termoBusca) {
+                const amostra = pesquisa_municipios_brasil_cache.slice(0, 10).map(m => ({
+                    tipo: 'municipio', rotulo: `${m.nome} (${m.uf_sigla})`,
+                    sub: `${m.regiao_nome}`, codigo: m.codigo,
+                }));
+                _inicio_renderizar_lista_territorio(amostra, true);
                 return;
             }
 
@@ -1235,7 +1483,7 @@
                 if (m.nome.toLocaleLowerCase('pt-BR').includes(termoBusca)) {
                     resultados.push({
                         tipo: 'municipio', rotulo: `${m.nome} (${m.uf_sigla})`,
-                        sub: `Município · ${m.regiao_nome}`,
+                        sub: `${m.regiao_nome}`,
                         codigo: m.codigo,
                     });
                 }
@@ -1250,7 +1498,7 @@
                 if (bateNome || bateSigla) {
                     ufsVistas.add(m.uf_sigla);
                     resultados.push({
-                        tipo: 'uf', rotulo: m.uf_nome, sub: `Estado · ${m.regiao_nome}`,
+                        tipo: 'uf', rotulo: m.uf_nome, sub: `Região ${m.regiao_nome}`,
                         uf_sigla: m.uf_sigla, uf_codigo: m.uf_codigo,
                     });
                 }
@@ -1270,18 +1518,7 @@
                 }
             }
 
-            if (!resultados.length) {
-                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhuma localidade encontrada.</div>';
-                lista.style.display = '';
-                return;
-            }
-
-            lista.innerHTML = resultados.slice(0, 15).map((r, i) => `
-                <div class="inicio-autocomplete-item" onclick="inicio_escolher_territorio(${i})">
-                    ${r.rotulo}<br><span class="sub">${r.sub}</span>
-                </div>`).join('');
-            lista.style.display = '';
-            lista.dataset.resultados = JSON.stringify(resultados.slice(0, 15));
+            _inicio_renderizar_lista_territorio(resultados.slice(0, 15), false);
         }
 
         function inicio_escolher_territorio(indice) {
@@ -1291,30 +1528,66 @@
             if (!escolhido) return;
 
             inicio_territorio_escolhido = escolhido;
+            document.getElementById('inicio_painel_territorio').classList.add('concluido');
+
+            document.getElementById('inicio_territorio_contagem').textContent = '';
             lista.innerHTML = '';
             lista.style.display = 'none';
 
-            const input = document.getElementById('inicio_busca_territorio');
-            input.value = '';
-            input.style.display = 'none';
+            const painelBusca = document.querySelector('#inicio_painel_territorio .inicio-painel-busca');
+            painelBusca.style.display = 'none';
 
             const caixaEscolhido = document.getElementById('inicio_territorio_escolhido');
             caixaEscolhido.style.display = '';
             caixaEscolhido.innerHTML = `
-                <span><strong>${escolhido.rotulo}</strong> <span style="color: var(--cinza-texto);">(${escolhido.sub})</span></span>
-                <span class="trocar" onclick="inicio_trocar_territorio()">trocar</span>`;
+                <span><span class="rotulo-principal">${escolhido.rotulo}</span><span class="rotulo-sub">${INICIO_ETIQUETA_TIPO_TERRITORIO[escolhido.tipo] || escolhido.tipo} · ${escolhido.sub}</span></span>
+                <button type="button" class="trocar" onclick="inicio_trocar_territorio()">Trocar</button>`;
 
             _inicio_atualizar_botao();
         }
 
         function inicio_trocar_territorio() {
             inicio_territorio_escolhido = null;
+            document.getElementById('inicio_painel_territorio').classList.remove('concluido');
             document.getElementById('inicio_territorio_escolhido').style.display = 'none';
+            document.querySelector('#inicio_painel_territorio .inicio-painel-busca').style.display = '';
             const input = document.getElementById('inicio_busca_territorio');
-            input.style.display = '';
             input.value = '';
             input.focus();
+            inicio_buscar_territorio('');
             _inicio_atualizar_botao();
+        }
+
+        const INICIO_FONTE_POR_CHAVE = {ibge: 'IBGE', bcb: 'Banco Central', comexstat: 'Comex Stat'};
+
+        function _inicio_etiqueta_fonte_tema(obj) {
+            return INICIO_FONTE_POR_CHAVE[obj.fonte] || obj.tema_nome;
+        }
+
+        // Desenha a lista de temas (sempre visível) e a contagem acima dela -
+        // mesmo padrão da lista de território.
+        function _inicio_renderizar_lista_tema(resultados, destaque) {
+            const lista = document.getElementById('inicio_tema_resultados');
+            const contagem = document.getElementById('inicio_tema_contagem');
+            lista.style.display = '';
+
+            if (!resultados.length) {
+                contagem.textContent = '';
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhum indicador encontrado para esse termo.</div>';
+                lista.dataset.resultados = '[]';
+                return;
+            }
+
+            contagem.textContent = destaque
+                ? `Indicadores em destaque · ${resultados.length} de ${pesquisa_catalogo_cache.length} no catálogo`
+                : `${resultados.length} resultado${resultados.length === 1 ? '' : 's'}`;
+
+            lista.innerHTML = resultados.map((obj, i) => `
+                <div class="inicio-autocomplete-item" onclick="inicio_escolher_tema(${i})">
+                    <span><span class="rotulo">${obj.nome}</span><span class="sub">${obj.tema_nome} · ${obj.unidade}</span></span>
+                    <span class="tipo-etiqueta">${_inicio_etiqueta_fonte_tema(obj)}</span>
+                </div>`).join('');
+            lista.dataset.resultados = JSON.stringify(resultados);
         }
 
         // Busca tema/indicador: filtra o catálogo já carregado
@@ -1322,19 +1595,20 @@
         // mesma fonte usada pelas caixas de tema na Base de Pesquisa, sem
         // nova chamada à API. Indicadores-grupo (soma de todas as
         // categorias, ex: "Todas as Culturas") aparecem primeiro por já
-        // virem ordenados assim no catálogo.
+        // virem ordenados assim no catálogo. Sem termo digitado, mostra os
+        // primeiros indicadores do catálogo como destaque.
         function inicio_buscar_tema(termo) {
-            const lista = document.getElementById('inicio_tema_resultados');
             const termoBusca = (termo || '').trim().toLocaleLowerCase('pt-BR');
 
-            if (!termoBusca) {
-                lista.innerHTML = '';
-                lista.style.display = 'none';
+            if (!pesquisa_catalogo_cache.length) {
+                document.getElementById('inicio_tema_contagem').textContent = '';
+                document.getElementById('inicio_tema_resultados').innerHTML =
+                    '<div class="inicio-autocomplete-vazio">Carregando catálogo de indicadores...</div>';
                 return;
             }
-            if (!pesquisa_catalogo_cache.length) {
-                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Carregando catálogo de indicadores...</div>';
-                lista.style.display = '';
+
+            if (!termoBusca) {
+                _inicio_renderizar_lista_tema(pesquisa_catalogo_cache.slice(0, 10), true);
                 return;
             }
 
@@ -1343,18 +1617,7 @@
                 obj.tema_nome.toLocaleLowerCase('pt-BR').includes(termoBusca)
             ).slice(0, 15);
 
-            if (!resultados.length) {
-                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhum indicador encontrado.</div>';
-                lista.style.display = '';
-                return;
-            }
-
-            lista.innerHTML = resultados.map((obj, i) => `
-                <div class="inicio-autocomplete-item" onclick="inicio_escolher_tema(${i})">
-                    ${obj.nome}<br><span class="sub">${obj.tema_nome} · ${obj.unidade}</span>
-                </div>`).join('');
-            lista.style.display = '';
-            lista.dataset.resultados = JSON.stringify(resultados);
+            _inicio_renderizar_lista_tema(resultados, false);
         }
 
         function inicio_escolher_tema(indice) {
@@ -1364,29 +1627,33 @@
             if (!escolhido) return;
 
             inicio_tema_escolhido = escolhido;
+            document.getElementById('inicio_painel_tema').classList.add('concluido');
+
+            document.getElementById('inicio_tema_contagem').textContent = '';
             lista.innerHTML = '';
             lista.style.display = 'none';
 
-            const input = document.getElementById('inicio_busca_tema');
-            input.value = '';
-            input.style.display = 'none';
+            const painelBusca = document.querySelector('#inicio_painel_tema .inicio-painel-busca');
+            painelBusca.style.display = 'none';
 
             const caixaEscolhido = document.getElementById('inicio_tema_escolhido');
             caixaEscolhido.style.display = '';
             caixaEscolhido.innerHTML = `
-                <span><strong>${escolhido.nome}</strong> <span style="color: var(--cinza-texto);">(${escolhido.tema_nome})</span></span>
-                <span class="trocar" onclick="inicio_trocar_tema()">trocar</span>`;
+                <span><span class="rotulo-principal">${escolhido.nome}</span><span class="rotulo-sub">${_inicio_etiqueta_fonte_tema(escolhido)} · ${escolhido.tema_nome}</span></span>
+                <button type="button" class="trocar" onclick="inicio_trocar_tema()">Trocar</button>`;
 
             _inicio_atualizar_botao();
         }
 
         function inicio_trocar_tema() {
             inicio_tema_escolhido = null;
+            document.getElementById('inicio_painel_tema').classList.remove('concluido');
             document.getElementById('inicio_tema_escolhido').style.display = 'none';
+            document.querySelector('#inicio_painel_tema .inicio-painel-busca').style.display = '';
             const input = document.getElementById('inicio_busca_tema');
-            input.style.display = '';
             input.value = '';
             input.focus();
+            inicio_buscar_tema('');
             _inicio_atualizar_botao();
         }
 
