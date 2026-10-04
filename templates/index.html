@@ -504,7 +504,7 @@
             <p>Reúne, cruza e visualiza dados oficiais do IBGE, Comex Stat e Banco Central para Santa Catarina — do Brasil ao município.</p>
         </div>
 
-        <div class="tabs">
+        <div class="tabs" id="tabs_barra" style="display: none;">
             <button class="tab-button active" onclick="abrir_aba('pesquisa')">Pesquisa</button>
             <button class="tab-button" onclick="abrir_aba('upload')">Upload</button>
             <button class="tab-button" onclick="abrir_aba('datasets')">Datasets</button>
@@ -561,6 +561,12 @@
 
             <button class="btn btn-primary" onclick="pesquisa_consultar()">Pesquisar</button>
             <div id="pesquisa_resultado"></div>
+
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--cinza-linha);">
+                <a href="#" onclick="mostrar_ferramentas_avancadas(); return false;" style="color: var(--cinza-texto); font-size: 13px; text-decoration: underline;">
+                    Ferramentas avançadas (upload de planilhas, análises manuais, consultas diretas ao IBGE e BCB)
+                </a>
+            </div>
         </div>
 
         <!-- ABA: UPLOAD -->
@@ -1003,10 +1009,12 @@
             if (ano_fim) payload.ano_fim = ano_fim;
 
             resultadoDiv.innerHTML = '<p style="color: var(--cinza-texto);">Consultando...</p>';
+            resultadoDiv.scrollIntoView({behavior: 'smooth', block: 'start'});
 
             axios.post('/api/pesquisa/consultar', payload)
                 .then(response => {
                     pesquisa_exibir_resultado(response.data);
+                    resultadoDiv.scrollIntoView({behavior: 'smooth', block: 'start'});
                 })
                 .catch(error => {
                     const msg = error.response?.data?.erro || 'Erro ao consultar a base de pesquisa';
@@ -1120,12 +1128,28 @@
             }
         });
 
-        function abrir_aba(nome_aba) {
+        function abrir_aba(nome_aba, botaoEl) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
-            
+
             document.getElementById(nome_aba).classList.add('active');
-            event.target.classList.add('active');
+
+            // botaoEl é passado quando a troca de aba é feita por código (sem
+            // clique de verdade); se não vier, usa o event.target do clique.
+            const alvo = botaoEl || (typeof event !== 'undefined' ? event.target : null);
+            if (alvo) alvo.classList.add('active');
+        }
+
+        // A plataforma abre direto na tela de Pesquisa, com a barra de abas
+        // escondida - as demais ferramentas (Upload, Datasets, análises
+        // manuais, consultas diretas ao IBGE/BCB) ficam atrás deste link,
+        // para quem quiser ir além do fluxo guiado de escala + objetos.
+        function mostrar_ferramentas_avancadas() {
+            const barra = document.getElementById('tabs_barra');
+            barra.style.display = '';
+            const botaoUpload = barra.querySelector('.tab-button:nth-child(2)');
+            abrir_aba('upload', botaoUpload);
+            barra.scrollIntoView({behavior: 'smooth', block: 'start'});
         }
 
         function fazer_upload() {
