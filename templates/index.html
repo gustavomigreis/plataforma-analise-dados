@@ -262,6 +262,68 @@
             display: block;
         }
 
+        /* Aba Início - caixas de busca com autocomplete para território e tema */
+        .inicio-autocomplete-lista {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            background: var(--branco);
+            border: 1px solid var(--cinza-linha);
+            border-top: none;
+            max-height: 320px;
+            overflow-y: auto;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        }
+
+        .inicio-autocomplete-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 13.5px;
+            border-bottom: 1px solid var(--cinza-linha);
+        }
+
+        .inicio-autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .inicio-autocomplete-item:hover,
+        .inicio-autocomplete-item.destacado {
+            background: #f5f5f5;
+        }
+
+        .inicio-autocomplete-item .sub {
+            color: var(--cinza-texto);
+            font-size: 12px;
+        }
+
+        .inicio-autocomplete-vazio {
+            padding: 10px 14px;
+            color: var(--cinza-texto);
+            font-size: 13px;
+        }
+
+        .inicio-escolhido {
+            margin-top: 8px;
+            padding: 10px 14px;
+            background: #f5f5f5;
+            border: 1px solid var(--cinza-linha);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 13.5px;
+        }
+
+        .inicio-escolhido .trocar {
+            color: var(--vermelho);
+            cursor: pointer;
+            font-size: 12.5px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
         .tab-content h2 {
             font-size: 1.5em;
             font-weight: 800;
@@ -612,7 +674,8 @@
         </div>
 
         <div class="tabs" id="tabs_barra" style="display: none;">
-            <button class="tab-button active" onclick="abrir_aba('pesquisa')">Pesquisa</button>
+            <button class="tab-button active" onclick="abrir_aba('inicio')">Início</button>
+            <button class="tab-button" onclick="abrir_aba('pesquisa')">Pesquisa</button>
             <button class="tab-button" onclick="abrir_aba('upload')">Upload</button>
             <button class="tab-button" onclick="abrir_aba('datasets')">Datasets</button>
             <button class="tab-button" onclick="abrir_aba('estatistica')">Estatística</button>
@@ -627,8 +690,52 @@
     <div class="container">
         <div class="content-wrap">
 
-        <!-- ABA: PESQUISA (tela principal/entrada da plataforma) -->
-        <div id="pesquisa" class="tab-content active">
+        <!-- ABA: INÍCIO (ponto de entrada - duas buscas: território e tema) -->
+        <div id="inicio" class="tab-content active">
+            <h2>O que você quer consultar?</h2>
+            <p style="color: var(--cinza-texto); margin-top: -8px; margin-bottom: 28px;">
+                Busque a unidade territorial (município, estado ou região) e o tema ou indicador que lhe interessam.
+                Ao escolher os dois, levamos direto para o resultado na Base de Pesquisa.
+            </p>
+
+            <div class="grid-2" style="gap: 24px; align-items: start;">
+                <div class="form-group" style="position: relative;">
+                    <label for="inicio_busca_territorio">1. Unidade territorial</label>
+                    <input type="text" id="inicio_busca_territorio" autocomplete="off"
+                        placeholder="Digite um município, estado ou região..."
+                        oninput="inicio_buscar_territorio(this.value)"
+                        onfocus="inicio_buscar_territorio(this.value)">
+                    <div id="inicio_territorio_resultados" class="inicio-autocomplete-lista"></div>
+                    <div id="inicio_territorio_escolhido" class="inicio-escolhido" style="display: none;"></div>
+                </div>
+
+                <div class="form-group" style="position: relative;">
+                    <label for="inicio_busca_tema">2. Tema ou indicador</label>
+                    <input type="text" id="inicio_busca_tema" autocomplete="off"
+                        placeholder="Digite um indicador, ex: população, exportações, PIB..."
+                        oninput="inicio_buscar_tema(this.value)"
+                        onfocus="inicio_buscar_tema(this.value)">
+                    <div id="inicio_tema_resultados" class="inicio-autocomplete-lista"></div>
+                    <div id="inicio_tema_escolhido" class="inicio-escolhido" style="display: none;"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="inicio_botao_ver" onclick="inicio_ver_resultado()" disabled style="margin-top: 24px;">
+                Ver resultado
+            </button>
+            <p id="inicio_aviso" style="color: var(--cinza-texto); font-size: 13px; margin-top: 10px;">
+                Escolha uma unidade territorial e um tema para continuar.
+            </p>
+
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--cinza-linha);">
+                <a href="#" onclick="inicio_ir_para_pesquisa(); return false;" style="color: var(--cinza-texto); font-size: 13px; text-decoration: underline;">
+                    Prefiro ir direto para a Base de Pesquisa (escolher vários indicadores e filtros de uma vez)
+                </a>
+            </div>
+        </div>
+
+        <!-- ABA: PESQUISA (escala + múltiplos objetos) -->
+        <div id="pesquisa" class="tab-content">
             <h2>Base de Pesquisa</h2>
             <p style="color: var(--cinza-texto); margin-top: -8px; margin-bottom: 20px;">
                 Escolha uma escala territorial e um ou mais objetos (indicadores do IBGE, Banco Central e Comex Stat)
@@ -1074,6 +1181,298 @@
                 });
 
             pesquisa_popular_anos_comex();
+        }
+
+        // ===== ABA: INÍCIO (duas buscas - território e tema - como ponto de
+        // entrada mais direto que a Base de Pesquisa completa) =====
+
+        // Guarda a unidade territorial e o objeto (tema/indicador) escolhidos
+        // nas duas buscas, até o usuário confirmar com "Ver resultado".
+        let inicio_territorio_escolhido = null; // {tipo: 'municipio'|'uf'|'regiao', ...}
+        let inicio_tema_escolhido = null; // item do catálogo (pesquisa_catalogo_cache)
+
+        function _inicio_atualizar_botao() {
+            const botao = document.getElementById('inicio_botao_ver');
+            const aviso = document.getElementById('inicio_aviso');
+            const pronto = inicio_territorio_escolhido && inicio_tema_escolhido;
+            botao.disabled = !pronto;
+            if (pronto) {
+                aviso.textContent = '';
+            } else if (!inicio_territorio_escolhido && !inicio_tema_escolhido) {
+                aviso.textContent = 'Escolha uma unidade territorial e um tema para continuar.';
+            } else if (!inicio_territorio_escolhido) {
+                aviso.textContent = 'Falta escolher a unidade territorial.';
+            } else {
+                aviso.textContent = 'Falta escolher o tema ou indicador.';
+            }
+        }
+
+        // Busca território: junta município, UF e região intermediária/
+        // imediata num só resultado, a partir do cache de municípios já
+        // carregado para a Base de Pesquisa (pesquisa_municipios_brasil_cache)
+        // - sem nova chamada à API. Resultado é um "tipo" que, ao ser
+        // escolhido, diz à Base de Pesquisa qual escala e filtro usar.
+        function inicio_buscar_territorio(termo) {
+            const lista = document.getElementById('inicio_territorio_resultados');
+            const termoBusca = (termo || '').trim().toLocaleLowerCase('pt-BR');
+
+            if (!termoBusca) {
+                lista.innerHTML = '';
+                lista.style.display = 'none';
+                return;
+            }
+            if (!pesquisa_municipios_brasil_cache.length) {
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Carregando lista de municípios...</div>';
+                lista.style.display = '';
+                return;
+            }
+
+            const resultados = [];
+
+            // Municípios (até 8 primeiros que batem)
+            for (const m of pesquisa_municipios_brasil_cache) {
+                if (resultados.length >= 8) break;
+                if (m.nome.toLocaleLowerCase('pt-BR').includes(termoBusca)) {
+                    resultados.push({
+                        tipo: 'municipio', rotulo: `${m.nome} (${m.uf_sigla})`,
+                        sub: `Município · ${m.regiao_nome}`,
+                        codigo: m.codigo,
+                    });
+                }
+            }
+
+            // Estados (UF) - nome ou sigla
+            const ufsVistas = new Set();
+            for (const m of pesquisa_municipios_brasil_cache) {
+                if (ufsVistas.has(m.uf_sigla)) continue;
+                const bateNome = m.uf_nome && m.uf_nome.toLocaleLowerCase('pt-BR').includes(termoBusca);
+                const bateSigla = m.uf_sigla && m.uf_sigla.toLocaleLowerCase('pt-BR') === termoBusca;
+                if (bateNome || bateSigla) {
+                    ufsVistas.add(m.uf_sigla);
+                    resultados.push({
+                        tipo: 'uf', rotulo: m.uf_nome, sub: `Estado · ${m.regiao_nome}`,
+                        uf_sigla: m.uf_sigla, uf_codigo: m.uf_codigo,
+                    });
+                }
+            }
+
+            // Regiões intermediárias
+            const regioesVistas = new Set();
+            for (const m of pesquisa_municipios_brasil_cache) {
+                const nomeRegiao = m.regiao_intermediaria_nome;
+                if (!nomeRegiao || regioesVistas.has(nomeRegiao)) continue;
+                if (nomeRegiao.toLocaleLowerCase('pt-BR').includes(termoBusca)) {
+                    regioesVistas.add(nomeRegiao);
+                    resultados.push({
+                        tipo: 'regiao', rotulo: nomeRegiao, sub: `Região intermediária · ${m.uf_sigla}`,
+                        regiao_codigo: m.regiao_intermediaria_codigo,
+                    });
+                }
+            }
+
+            if (!resultados.length) {
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhuma localidade encontrada.</div>';
+                lista.style.display = '';
+                return;
+            }
+
+            lista.innerHTML = resultados.slice(0, 15).map((r, i) => `
+                <div class="inicio-autocomplete-item" onclick="inicio_escolher_territorio(${i})">
+                    ${r.rotulo}<br><span class="sub">${r.sub}</span>
+                </div>`).join('');
+            lista.style.display = '';
+            lista.dataset.resultados = JSON.stringify(resultados.slice(0, 15));
+        }
+
+        function inicio_escolher_territorio(indice) {
+            const lista = document.getElementById('inicio_territorio_resultados');
+            const resultados = JSON.parse(lista.dataset.resultados || '[]');
+            const escolhido = resultados[indice];
+            if (!escolhido) return;
+
+            inicio_territorio_escolhido = escolhido;
+            lista.innerHTML = '';
+            lista.style.display = 'none';
+
+            const input = document.getElementById('inicio_busca_territorio');
+            input.value = '';
+            input.style.display = 'none';
+
+            const caixaEscolhido = document.getElementById('inicio_territorio_escolhido');
+            caixaEscolhido.style.display = '';
+            caixaEscolhido.innerHTML = `
+                <span><strong>${escolhido.rotulo}</strong> <span style="color: var(--cinza-texto);">(${escolhido.sub})</span></span>
+                <span class="trocar" onclick="inicio_trocar_territorio()">trocar</span>`;
+
+            _inicio_atualizar_botao();
+        }
+
+        function inicio_trocar_territorio() {
+            inicio_territorio_escolhido = null;
+            document.getElementById('inicio_territorio_escolhido').style.display = 'none';
+            const input = document.getElementById('inicio_busca_territorio');
+            input.style.display = '';
+            input.value = '';
+            input.focus();
+            _inicio_atualizar_botao();
+        }
+
+        // Busca tema/indicador: filtra o catálogo já carregado
+        // (pesquisa_catalogo_cache) pelo nome do indicador ou do tema -
+        // mesma fonte usada pelas caixas de tema na Base de Pesquisa, sem
+        // nova chamada à API. Indicadores-grupo (soma de todas as
+        // categorias, ex: "Todas as Culturas") aparecem primeiro por já
+        // virem ordenados assim no catálogo.
+        function inicio_buscar_tema(termo) {
+            const lista = document.getElementById('inicio_tema_resultados');
+            const termoBusca = (termo || '').trim().toLocaleLowerCase('pt-BR');
+
+            if (!termoBusca) {
+                lista.innerHTML = '';
+                lista.style.display = 'none';
+                return;
+            }
+            if (!pesquisa_catalogo_cache.length) {
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Carregando catálogo de indicadores...</div>';
+                lista.style.display = '';
+                return;
+            }
+
+            const resultados = pesquisa_catalogo_cache.filter(obj =>
+                obj.nome.toLocaleLowerCase('pt-BR').includes(termoBusca) ||
+                obj.tema_nome.toLocaleLowerCase('pt-BR').includes(termoBusca)
+            ).slice(0, 15);
+
+            if (!resultados.length) {
+                lista.innerHTML = '<div class="inicio-autocomplete-vazio">Nenhum indicador encontrado.</div>';
+                lista.style.display = '';
+                return;
+            }
+
+            lista.innerHTML = resultados.map((obj, i) => `
+                <div class="inicio-autocomplete-item" onclick="inicio_escolher_tema(${i})">
+                    ${obj.nome}<br><span class="sub">${obj.tema_nome} · ${obj.unidade}</span>
+                </div>`).join('');
+            lista.style.display = '';
+            lista.dataset.resultados = JSON.stringify(resultados);
+        }
+
+        function inicio_escolher_tema(indice) {
+            const lista = document.getElementById('inicio_tema_resultados');
+            const resultados = JSON.parse(lista.dataset.resultados || '[]');
+            const escolhido = resultados[indice];
+            if (!escolhido) return;
+
+            inicio_tema_escolhido = escolhido;
+            lista.innerHTML = '';
+            lista.style.display = 'none';
+
+            const input = document.getElementById('inicio_busca_tema');
+            input.value = '';
+            input.style.display = 'none';
+
+            const caixaEscolhido = document.getElementById('inicio_tema_escolhido');
+            caixaEscolhido.style.display = '';
+            caixaEscolhido.innerHTML = `
+                <span><strong>${escolhido.nome}</strong> <span style="color: var(--cinza-texto);">(${escolhido.tema_nome})</span></span>
+                <span class="trocar" onclick="inicio_trocar_tema()">trocar</span>`;
+
+            _inicio_atualizar_botao();
+        }
+
+        function inicio_trocar_tema() {
+            inicio_tema_escolhido = null;
+            document.getElementById('inicio_tema_escolhido').style.display = 'none';
+            const input = document.getElementById('inicio_busca_tema');
+            input.style.display = '';
+            input.value = '';
+            input.focus();
+            _inicio_atualizar_botao();
+        }
+
+        // Leva à Base de Pesquisa sem aplicar nenhuma escolha feita aqui -
+        // link "prefiro ir direto" para quem quer montar a consulta manual.
+        function inicio_ir_para_pesquisa() {
+            const barra = document.getElementById('tabs_barra');
+            barra.style.display = '';
+            const botaoPesquisa = barra.querySelector('.tab-button:nth-child(2)');
+            abrir_aba('pesquisa', botaoPesquisa);
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+
+        // Aplica a unidade territorial e o tema escolhidos na Base de
+        // Pesquisa (escala, filtros de localização, checkbox do objeto) e
+        // dispara a consulta automaticamente - o fluxo completo da aba
+        // Início termina aqui, sem o usuário precisar repetir a escolha.
+        function inicio_ver_resultado() {
+            if (!inicio_territorio_escolhido || !inicio_tema_escolhido) return;
+
+            const territorio = inicio_territorio_escolhido;
+            const tema = inicio_tema_escolhido;
+
+            // Escala: só usa 'municipio'/'uf' quando o indicador está
+            // disponível nessa escala - cai para a maior escala disponível
+            // do objeto escolhido quando não está (ex: um indicador só de
+            // Comex Stat disponível em 'uf'/'municipio', nunca 'brasil').
+            let escalaAlvo;
+            if (territorio.tipo === 'municipio') escalaAlvo = 'municipio';
+            else if (territorio.tipo === 'uf') escalaAlvo = 'uf';
+            else escalaAlvo = 'regiao';
+            if (!tema.escalas.includes(escalaAlvo)) {
+                escalaAlvo = tema.escalas.includes('municipio') ? 'municipio'
+                    : tema.escalas.includes('uf') ? 'uf'
+                    : tema.escalas.includes('regiao') ? 'regiao' : 'brasil';
+            }
+
+            const barra = document.getElementById('tabs_barra');
+            barra.style.display = '';
+            const botaoPesquisa = barra.querySelector('.tab-button:nth-child(2)');
+            abrir_aba('pesquisa', botaoPesquisa);
+
+            const selectEscala = document.getElementById('pesquisa_escala');
+            selectEscala.value = escalaAlvo;
+            pesquisa_mudar_escala();
+
+            // Preenche o filtro territorial correspondente, na escala que
+            // ficou ativa (município usa os selects em cascata + a lista de
+            // município marcada; UF/região aplicam o filtro certo quando a
+            // escala continua sendo 'municipio', ou ficam só de referência
+            // quando a escala virou 'uf'/'regiao', que não usa esses campos).
+            if (escalaAlvo === 'municipio') {
+                if (territorio.tipo === 'municipio') {
+                    const selectUf = document.getElementById('pesquisa_filtro_uf');
+                    const m = pesquisa_municipios_brasil_cache.find(x => x.codigo === territorio.codigo);
+                    if (m) {
+                        selectUf.value = m.uf_sigla;
+                        pesquisa_filtrar_localidade();
+                    }
+                    const selectMunicipio = document.getElementById('pesquisa_municipio');
+                    Array.from(selectMunicipio.options).forEach(opt => {
+                        opt.selected = Number(opt.value) === territorio.codigo;
+                    });
+                    pesquisa_atualizar_contador_localidades(1);
+                } else if (territorio.tipo === 'uf') {
+                    document.getElementById('pesquisa_filtro_uf').value = territorio.uf_sigla;
+                    pesquisa_filtrar_localidade();
+                }
+                // território.tipo === 'regiao' com escala município: não há
+                // filtro direto por região intermediária isolada no select
+                // em cascata atual (região imediata, sim) - deixa "(Todos)"
+                // os municípios do Brasil, o usuário pode refinar na própria
+                // Base de Pesquisa se quiser.
+            }
+
+            // Marca o checkbox do objeto escolhido.
+            document.querySelectorAll('.pesquisa_objeto_checkbox').forEach(cb => {
+                cb.checked = (cb.value === tema.chave);
+                if (cb.checked) {
+                    const details = cb.closest('details');
+                    if (details) details.open = true;
+                }
+            });
+
+            window.scrollTo({top: 0, behavior: 'smooth'});
+            pesquisa_consultar();
         }
 
         // Preenche os seletores de ano (início/fim) do Comércio Exterior -
