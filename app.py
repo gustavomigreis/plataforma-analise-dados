@@ -9,6 +9,7 @@ from db import get_connection, adapt_query, init_db, USE_POSTGRES, last_insert_i
 import ibge
 import comexstat
 import bcb
+import objetos as objetos_mod
 
 app = Flask(__name__)
 CORS(app)
@@ -616,6 +617,148 @@ def bcb_importar():
         return jsonify({'erro': str(e)}), 400
     except Exception as e:
         return jsonify({'erro': f'Falha ao importar dados do BCB: {str(e)}'}), 502
+
+
+@app.route('/api/objetos', methods=['GET'])
+def listar_objetos():
+    """
+    Lista o catálogo unificado de objetos (indicadores) disponíveis nas três
+    fontes de dados (IBGE/SIDRA, BCB, Comex Stat), opcionalmente filtrado por
+    escala territorial (?escala=municipio, por exemplo).
+    """
+    escala = request.args.get('escala')
+    try:
+        return jsonify({'objetos': objetos_mod.listar_objetos(escala), 'escalas': objetos_mod.ESCALAS})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+
+def _rodar_analises_automaticas(df_largo):
+    """
+    Dado um DataFrame "largo" (uma coluna por objeto selecionado, uma linha
+    por localidade), roda as mesmas análises estatísticas já disponíveis na
+    plataforma (estatística descritiva, correlação, distribuição,
+    agrupamento) automaticamente sobre as colunas numéricas, para alimentar
+    a tela de Pesquisa quando o usuário seleciona 2+ objetos.
+    """
+    resultado = {}
+    colunas_numericas = df_largo.select_dtypes(include=[np.number]).columns.tolist()
+
+    # Estatística descritiva por objeto (reaproveita a mesma lógica de
+    # /api/analise/estatistica, mas em memória, sem passar por dataset salvo)
+    descritivas = {}
+    for col in colunas_numericas:
+        valores = df_largo[col].dropna()
+        if valores.empty:
+            continue
+        descritivas[col] = {
+            'contagem': int(valores.count()),
+            'media': float(valores.mean()),
+            'mediana': float(valores.median()),
+            'desvio_padrao': float(valores.std()) if valores.count() > 1 else 0.0,
+            'minimo': float(valores.min()),
+            'maximo': float(valores.max()),
+        }
+    resultado['estatisticas'] = descritivas
+
+    # Correlação entre os objetos selecionados (só faz sentido com 2+ colunas
+    # numéricas e com alguma variação nos dados)
+    if len(colunas_numericas) >= 2:
+        try:
+            resultado['correlacao'] = df_largo[colunas_numericas].corr().round(4).to_dict()
+        except Exception:
+            resultado['correlacao'] = None
+    else:
+        resultado['correlacao'] = None
+
+    # Distribuição (histograma) de cada objeto numérico
+    distribuicoes = {}
+    for col in colunas_numericas:
+        valores = df_largo[col].dropna().values
+        if len(valores) < 2:
+            continue
+        try:
+            contagens, limites = np.histogram(valores, bins=min(10, len(valores)))
+            distribuicoes[col] = {'contagens': contagens.tolist(), 'limites': limites.tolist()}
+        except Exception:
+            pass
+    resultado['distribuicao'] = distribuicoes
+
+    # Agrupamento (clustering) simples por quartil do primeiro objeto numérico,
+    # como uma primeira visão de agrupamento das localidades sem exigir que o
+    # usuário escolha parâmetros - uma clusterização k-means ficaria mais
+    # pesada para o volume de dados típico desta tela (dezenas de municípios).
+    if colunas_numericas:
+        coluna_base = colunas_numericas[0]
+        try:
+            quartis = pd.qcut(df_largo[coluna_base], q=4, labels=['Q1 (menor)', 'Q2', 'Q3', 'Q4 (maior)'], duplicates='drop')
+            agrupamento = {}
+            for grupo, sub in df_largo.groupby(quartis, observed=True):
+                agrupamento[str(grupo)] = sub['localidade'].tolist()
+            resultado['agrupamento'] = {'coluna_base': coluna_base, 'grupos': agrupamento}
+        except Exception:
+            resultado['agrupamento'] = None
+    else:
+        resultado['agrupamento'] = None
+
+    return resultado
+
+
+@app.route('/api/pesquisa/consultar', methods=['POST'])
+def pesquisa_consultar():
+    """
+    Endpoint da tela de Pesquisa: recebe uma escala territorial e uma lista
+    de objetos (indicadores de qualquer uma das três fontes) e devolve os
+    dados de cada um já organizados por localidade. Quando 2 ou mais objetos
+    são selecionados, roda automaticamente as análises estatísticas
+    (descritiva, correlação, distribuição, agrupamento) sobre a seleção.
+    """
+    data = request.json or {}
+    escala = data.get('escala')
+    chaves_objetos = data.get('objetos', [])
+    codigo_localidade = data.get('codigo_localidade')
+    periodo = data.get('periodo', 'last')
+    ano_inicio = data.get('ano_inicio')
+    ano_fim = data.get('ano_fim')
+
+    if not escala or escala not in objetos_mod.ESCALAS:
+        return jsonify({'erro': f'Escala inválida. Opções: {", ".join(objetos_mod.ESCALAS)}'}), 400
+    if not chaves_objetos:
+        return jsonify({'erro': 'Selecione ao menos um objeto para pesquisar'}), 400
+
+    resultados_por_objeto = []
+    erros = []
+    for chave in chaves_objetos:
+        try:
+            r = objetos_mod.buscar_serie_objeto(
+                chave, escala, codigo_localidade=codigo_localidade, periodo=periodo,
+                ano_inicio=ano_inicio, ano_fim=ano_fim
+            )
+            resultados_por_objeto.append(r)
+        except ValueError as e:
+            erros.append({'objeto': chave, 'erro': str(e)})
+        except Exception as e:
+            erros.append({'objeto': chave, 'erro': f'Falha ao consultar: {str(e)}'})
+
+    resposta = {'escala': escala, 'resultados': resultados_por_objeto, 'erros': erros}
+
+    # Análises automáticas: só fazem sentido com 2+ objetos que de fato
+    # retornaram dado, e exigem reconciliar as séries por localidade comum
+    # (ex: cruzar população x PIB por município só funciona se as duas
+    # séries tiverem as mesmas localidades).
+    objetos_com_dado = [r for r in resultados_por_objeto if r['serie']]
+    if len(objetos_com_dado) >= 2:
+        try:
+            df_largo = None
+            for r in objetos_com_dado:
+                df_obj = pd.DataFrame(r['serie'])[['localidade', 'valor']].rename(columns={'valor': r['objeto']})
+                df_largo = df_obj if df_largo is None else df_largo.merge(df_obj, on='localidade', how='outer')
+
+            resposta['analises'] = _rodar_analises_automaticas(df_largo)
+        except Exception as e:
+            resposta['analises'] = {'erro': f'Falha ao rodar análises automáticas: {str(e)}'}
+
+    return jsonify(resposta)
 
 
 # Garante que o banco existe tanto rodando com `python app.py`

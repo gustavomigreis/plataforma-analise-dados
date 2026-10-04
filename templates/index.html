@@ -505,7 +505,8 @@
         </div>
 
         <div class="tabs">
-            <button class="tab-button active" onclick="abrir_aba('upload')">Upload</button>
+            <button class="tab-button active" onclick="abrir_aba('pesquisa')">Pesquisa</button>
+            <button class="tab-button" onclick="abrir_aba('upload')">Upload</button>
             <button class="tab-button" onclick="abrir_aba('datasets')">Datasets</button>
             <button class="tab-button" onclick="abrir_aba('estatistica')">Estatística</button>
             <button class="tab-button" onclick="abrir_aba('correlacao')">Correlação</button>
@@ -519,8 +520,51 @@
     <div class="container">
         <div class="content-wrap">
 
+        <!-- ABA: PESQUISA (tela principal/entrada da plataforma) -->
+        <div id="pesquisa" class="tab-content active">
+            <h2>Base de Pesquisa</h2>
+            <p style="color: var(--cinza-texto); margin-top: -8px; margin-bottom: 20px;">
+                Escolha uma escala territorial e um ou mais objetos (indicadores do IBGE, Banco Central e Comex Stat)
+                para consultar. Ao selecionar dois ou mais objetos, estatística descritiva, correlação, distribuição
+                e agrupamento são calculados automaticamente sobre a seleção.
+            </p>
+
+            <div class="form-group">
+                <label for="pesquisa_escala">Escala territorial</label>
+                <select id="pesquisa_escala" onchange="pesquisa_mudar_escala()">
+                    <option value="municipio">Município</option>
+                    <option value="uf">Unidade Federativa</option>
+                    <option value="regiao">Região</option>
+                    <option value="brasil">Brasil</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="pesquisa_localidade_group">
+                <label for="pesquisa_municipio">Município</label>
+                <select id="pesquisa_municipio"></select>
+            </div>
+
+            <div class="form-group" id="pesquisa_periodo_comex_group" style="display: none;">
+                <label>Período (Comércio Exterior)</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="pesquisa_ano_inicio" placeholder="Ano início (ex: 2023)" style="flex: 1;">
+                    <input type="text" id="pesquisa_ano_fim" placeholder="Ano fim (ex: 2024)" style="flex: 1;">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Objetos (selecione um ou mais)</label>
+                <div id="pesquisa_objetos_lista" style="border: 1px solid var(--cinza-linha); max-height: 320px; overflow-y: auto; padding: 4px;">
+                    <p style="padding: 12px; color: var(--cinza-texto);">Carregando catálogo de objetos...</p>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="pesquisa_consultar()">Pesquisar</button>
+            <div id="pesquisa_resultado"></div>
+        </div>
+
         <!-- ABA: UPLOAD -->
-        <div id="upload" class="tab-content active">
+        <div id="upload" class="tab-content">
             <h2>Fazer Upload de Dados</h2>
             <div class="form-group">
                 <label>Arraste o arquivo aqui ou clique para selecionar</label>
@@ -865,12 +909,197 @@
             link.click();
         }
 
+        // ===== ABA: PESQUISA (escala + múltiplos objetos) =====
+        let pesquisa_catalogo_cache = [];
+
+        function pesquisa_inicializar() {
+            axios.get('/api/objetos')
+                .then(response => {
+                    pesquisa_catalogo_cache = response.data.objetos;
+                    pesquisa_renderizar_objetos();
+                })
+                .catch(() => {
+                    document.getElementById('pesquisa_objetos_lista').innerHTML =
+                        '<p style="padding: 12px; color: var(--vermelho);">Erro ao carregar o catálogo de objetos.</p>';
+                });
+
+            // Reaproveita o cache de municípios de SC já carregado pela aba do IBGE
+            // (ibge_inicializar roda antes desta função na inicialização da página).
+            if (ibge_municipios_cache && ibge_municipios_cache.length) {
+                pesquisa_preencher_municipios();
+            } else {
+                setTimeout(pesquisa_preencher_municipios, 1000);
+            }
+        }
+
+        function pesquisa_preencher_municipios() {
+            const select = document.getElementById('pesquisa_municipio');
+            if (!select || !ibge_municipios_cache || !ibge_municipios_cache.length) return;
+            const municipios_ordenados = [...ibge_municipios_cache].sort((a, b) => a.nome.localeCompare(b.nome));
+            select.innerHTML = '';
+            municipios_ordenados.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m.codigo;
+                option.textContent = m.nome;
+                select.appendChild(option);
+            });
+        }
+
+        function pesquisa_mudar_escala() {
+            const escala = document.getElementById('pesquisa_escala').value;
+            document.getElementById('pesquisa_localidade_group').style.display =
+                (escala === 'municipio') ? '' : 'none';
+            pesquisa_renderizar_objetos();
+        }
+
+        function pesquisa_renderizar_objetos() {
+            const escala = document.getElementById('pesquisa_escala').value;
+            const container = document.getElementById('pesquisa_objetos_lista');
+            const disponiveis = pesquisa_catalogo_cache.filter(o => o.escalas.includes(escala));
+
+            if (!disponiveis.length) {
+                container.innerHTML = '<p style="padding: 12px; color: var(--cinza-texto);">Nenhum objeto disponível para esta escala.</p>';
+                return;
+            }
+
+            const nomes_fonte = {ibge: 'IBGE/SIDRA', bcb: 'Banco Central', comex: 'Comércio Exterior'};
+            let html = '';
+            let fonte_atual = null;
+            disponiveis.forEach(obj => {
+                if (obj.fonte !== fonte_atual) {
+                    fonte_atual = obj.fonte;
+                    html += `<div style="padding: 8px 10px 4px; font-size: 12px; color: var(--cinza-texto); font-weight: 600;">${nomes_fonte[fonte_atual] || fonte_atual}</div>`;
+                }
+                html += `
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer;">
+                        <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
+                        <span>${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
+                    </label>`;
+            });
+            container.innerHTML = html;
+
+            // Comércio Exterior exige período - mostra os campos de ano só se algum objeto comex estiver visível
+            const tem_comex = disponiveis.some(o => o.fonte === 'comex');
+            document.getElementById('pesquisa_periodo_comex_group').style.display = tem_comex ? '' : 'none';
+        }
+
+        function pesquisa_consultar() {
+            const escala = document.getElementById('pesquisa_escala').value;
+            const chaves_selecionadas = Array.from(document.querySelectorAll('.pesquisa_objeto_checkbox:checked')).map(el => el.value);
+            const resultadoDiv = document.getElementById('pesquisa_resultado');
+
+            if (!chaves_selecionadas.length) {
+                resultadoDiv.innerHTML = '<div class="alert alert-error">Selecione ao menos um objeto.</div>';
+                return;
+            }
+
+            const payload = {escala, objetos: chaves_selecionadas};
+            if (escala === 'municipio') {
+                payload.codigo_localidade = document.getElementById('pesquisa_municipio').value;
+            }
+            const ano_inicio = document.getElementById('pesquisa_ano_inicio').value;
+            const ano_fim = document.getElementById('pesquisa_ano_fim').value;
+            if (ano_inicio) payload.ano_inicio = ano_inicio;
+            if (ano_fim) payload.ano_fim = ano_fim;
+
+            resultadoDiv.innerHTML = '<p style="color: var(--cinza-texto);">Consultando...</p>';
+
+            axios.post('/api/pesquisa/consultar', payload)
+                .then(response => {
+                    pesquisa_exibir_resultado(response.data);
+                })
+                .catch(error => {
+                    const msg = error.response?.data?.erro || 'Erro ao consultar a base de pesquisa';
+                    resultadoDiv.innerHTML = `<div class="alert alert-error">❌ ${msg}</div>`;
+                });
+        }
+
+        function pesquisa_exibir_resultado(data) {
+            const resultadoDiv = document.getElementById('pesquisa_resultado');
+            let html = '';
+
+            if (data.erros && data.erros.length) {
+                data.erros.forEach(e => {
+                    html += `<div class="alert alert-error" style="margin-top: 10px;">⚠️ ${e.objeto}: ${e.erro}</div>`;
+                });
+            }
+
+            data.resultados.forEach(r => {
+                html += `<h3 style="margin-top: 20px;">${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>`;
+                if (!r.serie.length) {
+                    html += '<p style="color: var(--cinza-texto);">Nenhum dado retornado.</p>';
+                    return;
+                }
+                html += '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
+                r.serie.slice(0, 50).forEach(item => {
+                    const valor = (item.valor === null || item.valor === undefined) ? '-' : item.valor.toLocaleString('pt-BR');
+                    html += `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
+                });
+                html += '</tbody></table>';
+                if (r.serie.length > 50) {
+                    html += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 50 de ${r.serie.length} registros.</p>`;
+                }
+            });
+
+            if (data.analises) {
+                html += pesquisa_renderizar_analises(data.analises);
+            }
+
+            resultadoDiv.innerHTML = html;
+        }
+
+        function pesquisa_renderizar_analises(analises) {
+            if (analises.erro) {
+                return `<div class="alert alert-error" style="margin-top: 20px;">❌ ${analises.erro}</div>`;
+            }
+
+            let html = '<h2 style="margin-top: 30px;">Análises Automáticas</h2>';
+
+            // Estatística descritiva
+            html += '<h3>Estatística Descritiva</h3>';
+            html += '<table class="data-table"><thead><tr><th>Objeto</th><th>N</th><th>Média</th><th>Mediana</th><th>Desvio Padrão</th><th>Mínimo</th><th>Máximo</th></tr></thead><tbody>';
+            for (const [objeto, est] of Object.entries(analises.estatisticas || {})) {
+                html += `<tr>
+                    <td>${objeto}</td>
+                    <td>${est.contagem}</td>
+                    <td>${est.media.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                    <td>${est.mediana.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                    <td>${est.desvio_padrao.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                    <td>${est.minimo.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                    <td>${est.maximo.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+
+            // Correlação
+            if (analises.correlacao) {
+                html += '<h3 style="margin-top: 20px;">Correlação</h3>';
+                const objs = Object.keys(analises.correlacao);
+                html += '<table class="data-table"><thead><tr><th></th>' + objs.map(o => `<th>${o}</th>`).join('') + '</tr></thead><tbody>';
+                objs.forEach(o1 => {
+                    html += `<tr><td>${o1}</td>` + objs.map(o2 => `<td>${analises.correlacao[o1][o2].toFixed(4)}</td>`).join('') + '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+
+            // Agrupamento
+            if (analises.agrupamento) {
+                html += `<h3 style="margin-top: 20px;">Agrupamento por Quartil (base: ${analises.agrupamento.coluna_base})</h3>`;
+                for (const [grupo, localidades] of Object.entries(analises.agrupamento.grupos)) {
+                    html += `<p><strong>${grupo}:</strong> ${localidades.join(', ')}</p>`;
+                }
+            }
+
+            return html;
+        }
+
         // Inicializar
         window.addEventListener('load', () => {
             carregar_datasets();
             populate_dataset_selects();
             ibge_inicializar();
             bcb_inicializar();
+            pesquisa_inicializar();
         });
 
         // Drag and drop
