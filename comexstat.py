@@ -27,8 +27,33 @@ FLUXOS = {
     'importacao': 'import',
 }
 
+# Métricas disponíveis na API (confirmado contra a documentação oficial,
+# doc.yaml do Comex Stat). metricCIF/metricFreight/metricInsurance só têm
+# sentido para importação (não existem no fluxo de exportação).
+METRICAS_DISPONIVEIS = {
+    'fob': 'metricFOB',          # valor no embarque, sem frete/seguro (export e import)
+    'kg': 'metricKG',            # peso líquido em kg (export e import)
+    'cif': 'metricCIF',          # valor com frete+seguro (somente import)
+    'frete': 'metricFreight',    # valor do frete declarado (somente import)
+    'seguro': 'metricInsurance',  # valor do seguro declarado (somente import)
+    'quantidade_estatistica': 'metricStatistic',  # quantidade na unidade estatística do produto
+}
 
-def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, uf=UF_SC):
+# Detalhamentos (agrupamentos) disponíveis para a consulta, além de 'city'.
+DETALHAMENTOS_DISPONIVEIS = {
+    'municipio': 'city',
+    'pais': 'country',           # país parceiro (origem na importação, destino na exportação)
+    'uf': 'state',
+    'ncm': 'ncm',                 # produto (Nomenclatura Comum do Mercosul)
+    'bloco_economico': 'economicBlock',
+    'via_transporte': 'viaTransport',
+    'secao': 'section',           # seção do Sistema Harmonizado
+    'urf': 'urf',                 # unidade da Receita Federal que processou
+}
+
+
+def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, uf=UF_SC,
+                              detalhamento='municipio', metricas=('fob', 'kg')):
     """
     Consulta a API do Comex Stat para exportações ou importações.
 
@@ -36,26 +61,47 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
     ano_inicio, ano_fim: strings 'YYYY' (ex: '2023', '2024')
     codigo_municipio: código IBGE do município (opcional - se None, traz todos os municípios da UF)
     uf: código da UF (padrão: Santa Catarina)
+    detalhamento: chave de DETALHAMENTOS_DISPONIVEIS - define o agrupamento
+                  dos resultados (padrão: por município, comportamento original)
+    metricas: tupla de chaves de METRICAS_DISPONIVEIS a retornar (padrão: FOB e KG,
+              comportamento original). metricCIF/frete/seguro só se aplicam a
+              importação - pedi-las numa consulta de exportação simplesmente
+              não retorna a coluna (a API as ignora nesse fluxo).
 
-    Retorna uma lista de dicts: município, valor FOB (US$), peso líquido (kg), ano
+    Retorna uma lista de dicts: município (ou outro agrupamento conforme
+    'detalhamento'), as métricas pedidas, fluxo e período.
     """
     if fluxo not in FLUXOS:
         raise ValueError(f'Fluxo inválido: {fluxo}. Use "exportacao" ou "importacao"')
+    if detalhamento not in DETALHAMENTOS_DISPONIVEIS:
+        raise ValueError(f'Detalhamento inválido: {detalhamento}. Opções: {", ".join(DETALHAMENTOS_DISPONIVEIS)}')
+    metricas_invalidas = [m for m in metricas if m not in METRICAS_DISPONIVEIS]
+    if metricas_invalidas:
+        raise ValueError(f'Métrica(s) inválida(s): {metricas_invalidas}. Opções: {", ".join(METRICAS_DISPONIVEIS)}')
 
     filtros = [{'filter': 'state', 'values': [str(uf)]}]
     if codigo_municipio:
         filtros.append({'filter': 'city', 'values': [str(codigo_municipio)]})
+
+    campo_detalhe = DETALHAMENTOS_DISPONIVEIS[detalhamento]
+    campos_metricas = [METRICAS_DISPONIVEIS[m] for m in metricas]
 
     payload = {
         'flow': FLUXOS[fluxo],
         'monthDetail': False,
         'period': {'from': f'{ano_inicio}-01', 'to': f'{ano_fim}-12'},
         'filters': filtros,
-        'details': ['city'],
-        'metrics': ['metricFOB', 'metricKG'],
+        'details': [campo_detalhe],
+        'metrics': campos_metricas,
     }
 
-    resp = request_com_retry('post', f'{COMEX_BASE}/cities', json=payload, timeout=30)
+    # O endpoint /cities só suporta detalhamento por município/UF/país (é o
+    # mais agregado). Detalhamentos mais finos (NCM, via de transporte, seção
+    # do SH, URF, bloco econômico) exigem o endpoint /general - confirmado
+    # contra a documentação oficial (doc.yaml) da API.
+    endpoint = '/cities' if detalhamento == 'municipio' else '/general'
+
+    resp = request_com_retry('post', f'{COMEX_BASE}{endpoint}', json=payload, timeout=30)
     resp.raise_for_status()
     dados_brutos = resp.json()
 
@@ -65,33 +111,69 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
     # (ex: "Palhoça - SC"), e não em 'city'/'coCity' como a documentação sugeria.
     lista = dados_brutos.get('data', {}).get('list', [])
 
+    # Campos de agrupamento conhecidos por detalhamento (quando não é por
+    # município). Mapeamento best-effort, baseado no padrão noXxx/noXxxEng
+    # observado na API - não totalmente validado contra chamada real para
+    # todo detalhamento, dado que exigiria N testes against a API externa;
+    # se o campo não existir na resposta, cai no fallback 'rotulo' genérico.
+    _CAMPO_ROTULO_POR_DETALHE = {
+        'pais': 'noCountry',
+        'uf': 'noState',
+        'ncm': 'noNcmPortuguese',
+        'bloco_economico': 'noBlock',
+        'via_transporte': 'noViaTransport',
+        'secao': 'noSection',
+        'urf': 'noUrf',
+    }
+
     resultado = []
     for item in lista:
-        nome_mun_uf = item.get('noMunMinsgUf')
-        if nome_mun_uf:
-            municipio, _, sigla_uf = nome_mun_uf.rpartition(' - ')
+        if detalhamento == 'municipio':
+            nome_mun_uf = item.get('noMunMinsgUf')
+            if nome_mun_uf:
+                rotulo, _, sigla_uf = nome_mun_uf.rpartition(' - ')
+            else:
+                rotulo, sigla_uf = 'Desconhecido', None
+
+            # Checagem defensiva: garante que o registro é mesmo de SC, já que
+            # um código de UF incorreto no filtro causaria silenciosamente
+            # dados de outro estado (como aconteceu antes com o código do
+            # IBGE em vez do código próprio do Comex Stat). Se a UF vier e não
+            # for SC, descarta.
+            if sigla_uf and uf == UF_SC and sigla_uf != 'SC':
+                continue
         else:
-            municipio, sigla_uf = 'Desconhecido', None
+            campo_rotulo = _CAMPO_ROTULO_POR_DETALHE.get(detalhamento)
+            rotulo = item.get(campo_rotulo) if campo_rotulo else None
+            if rotulo is None:
+                rotulo = 'Desconhecido'
 
-        # Checagem defensiva: garante que o registro é mesmo de SC, já que um
-        # código de UF incorreto no filtro causaria silenciosamente dados de
-        # outro estado (como aconteceu antes com o código do IBGE em vez do
-        # código próprio do Comex Stat). Se a UF vier e não for SC, descarta.
-        if sigla_uf and uf == UF_SC and sigla_uf != 'SC':
-            continue
-
-        resultado.append({
-            'municipio': municipio,
-            'valor_fob_usd': item.get('metricFOB'),
-            'peso_liquido_kg': item.get('metricKG'),
+        registro = {
+            'rotulo': rotulo,
+            'detalhamento': detalhamento,
             'fluxo': fluxo,
             'periodo': f'{ano_inicio}-{ano_fim}',
-        })
+        }
+        for chave_metrica in metricas:
+            campo_api = METRICAS_DISPONIVEIS[chave_metrica]
+            registro[chave_metrica] = item.get(campo_api)
 
-    # Ordena por valor FOB decrescente — não garantido pela API em si, mas é
-    # a ordem mais útil para quem consulta (maiores exportadores/importadores
+        # Mantém as chaves antigas (municipio/valor_fob_usd/peso_liquido_kg)
+        # quando o detalhamento é o padrão (município), para não quebrar o
+        # restante do código (frontend, dataset export) que já depende delas.
+        if detalhamento == 'municipio':
+            registro['municipio'] = rotulo
+            registro['valor_fob_usd'] = registro.get('fob')
+            registro['peso_liquido_kg'] = registro.get('kg')
+
+        resultado.append(registro)
+
+    # Ordena pela primeira métrica pedida, decrescente — não garantido pela
+    # API em si, mas é a ordem mais útil para quem consulta (maiores valores
     # primeiro) e o que a interface assume ao mostrar só os top N num gráfico.
-    resultado.sort(key=lambda r: r['valor_fob_usd'] or 0, reverse=True)
+    chave_ordenacao = metricas[0] if metricas else None
+    if chave_ordenacao:
+        resultado.sort(key=lambda r: r.get(chave_ordenacao) or 0, reverse=True)
 
     return resultado
 

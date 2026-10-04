@@ -53,7 +53,84 @@ INDICADORES = {
         'variavel': 707,
         'unidade': 'pessoas',
     },
+
+    # --- Ampliação do catálogo (validada contra a API real do SIDRA,
+    # testando cada tabela/variável em nível municipal antes de incluir).
+    # Demografia (Censo 2022)
+    'populacao_censo2022': {
+        'nome': 'População Residente (Censo 2022)',
+        'tabela': 4709,
+        'variavel': 93,
+        'unidade': 'pessoas',
+    },
+    'indice_envelhecimento': {
+        'nome': 'Índice de Envelhecimento',
+        'tabela': 9515,
+        'variavel': 10612,
+        'unidade': 'razão (60+/0-14 x100)',
+    },
+    'idade_mediana': {
+        'nome': 'Idade Mediana da População',
+        'tabela': 9515,
+        'variavel': 10613,
+        'unidade': 'anos',
+    },
+    'razao_sexo': {
+        'nome': 'Razão de Sexo',
+        'tabela': 9515,
+        'variavel': 8845,
+        'unidade': 'homens por 100 mulheres',
+    },
+    # Habitação (Censo 2022) - total de domicílios particulares permanentes
+    'domicilios_total': {
+        'nome': 'Domicílios Particulares Permanentes Ocupados',
+        'tabela': 6892,
+        'variavel': 381,
+        'unidade': 'domicílios',
+    },
+    # Agropecuária (PAM - Produção Agrícola Municipal)
+    'pam_area_plantada': {
+        'nome': 'Área Plantada ou Destinada à Colheita (Lavouras)',
+        'tabela': 5457,
+        'variavel': 8331,
+        'unidade': 'hectares',
+    },
+    'pam_valor_producao': {
+        'nome': 'Valor da Produção Agrícola (Lavouras)',
+        'tabela': 5457,
+        'variavel': 215,
+        'unidade': 'mil reais',
+    },
+    'pam_quantidade_produzida': {
+        'nome': 'Quantidade Produzida (Lavouras)',
+        'tabela': 5457,
+        'variavel': 214,
+        'unidade': 'toneladas',
+    },
+    # Pecuária (PPM - Pesquisa da Pecuária Municipal)
+    'ppm_efetivo_rebanho': {
+        'nome': 'Efetivo dos Rebanhos (Pecuária Municipal)',
+        'tabela': 3939,
+        'variavel': 105,
+        'unidade': 'cabeças',
+    },
 }
+
+# Observações sobre domínios pesquisados e NÃO incluídos no catálogo, porque
+# a fonte simplesmente não publica o dado em nível municipal no SIDRA (não é
+# uma limitação desta implementação, é da própria base):
+# - Saúde (estabelecimentos, leitos): pesquisa AMS do IBGE só tem dado até
+#   UF/Região/Brasil; CNES é sistema do DATASUS/Ministério da Saúde, fora do SIDRA.
+# - Finanças públicas municipais (receitas/despesas): publicadas pelo Tesouro
+#   Nacional via SICONFI, não pelo IBGE/SIDRA.
+# - Matrículas e docentes: Censo Escolar é do INEP, fora do SIDRA.
+# - Rendimento/ocupação via PNAD Contínua: essa pesquisa não tem nível
+#   municipal (só UF/Região Metropolitana/Brasil) - confirmado via teste real.
+# - Saneamento por categoria específica (ex: "água de rede geral", "sim"):
+#   as tabelas 6803-6805 existem e respondem, mas os códigos de classificação
+#   para a categoria específica (além de "Total") não foram confirmados com
+#   segurança; por isso não incluídos aqui para evitar mostrar sempre o
+#   "Total" rotulado como se fosse a categoria específica.
 
 # Tabelas usadas para montar o "Perfil do Município" (estilo IBGE Cidades).
 # Validadas contra a API real; ver notas de cada uma.

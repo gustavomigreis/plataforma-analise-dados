@@ -58,6 +58,54 @@ INDICADORES = {
         'unidade': '% do PIB',
         'frequencia': 'mensal',
     },
+
+    # --- Ampliação do catálogo: séries com código SGS de alta confiança
+    # (bem documentados e replicados de forma consistente em múltiplas
+    # fontes independentes). Códigos de séries mais "de nicho" (crédito,
+    # contas externas, agregados monetários M1-M4, finanças públicas) NÃO
+    # foram incluídos nesta rodada porque não foi possível confirmá-los
+    # ao vivo contra o SGS (API REST fora do ar desde 03/10/2026 e o
+    # webservice SOAP de fallback não está acessível a partir deste
+    # ambiente) — incluir um código errado faria a plataforma mostrar um
+    # dado errado silenciosamente, o que é pior do que não ter o
+    # indicador. Quando o REST do BCB voltar, validar e completar o
+    # catálogo (ver notas de pesquisa na sessão).
+    'selic_over': {
+        'codigo': 11,
+        'nome': 'Taxa Selic (Over, diária)',
+        'unidade': '% a.d.',
+        'frequencia': 'diária',
+    },
+    'cdi': {
+        'codigo': 12,
+        'nome': 'Taxa CDI (Over, diária)',
+        'unidade': '% a.d.',
+        'frequencia': 'diária',
+    },
+    'tjlp': {
+        'codigo': 256,
+        'nome': 'Taxa de Juros de Longo Prazo (TJLP)',
+        'unidade': '% a.a.',
+        'frequencia': 'mensal',
+    },
+    'igp_m': {
+        'codigo': 189,
+        'nome': 'IGP-M (Variação Mensal) - FGV',
+        'unidade': '%',
+        'frequencia': 'mensal',
+    },
+    'inpc_mensal': {
+        'codigo': 188,
+        'nome': 'INPC (Variação Mensal) - IBGE',
+        'unidade': '%',
+        'frequencia': 'mensal',
+    },
+    'ibc_br': {
+        'codigo': 24363,
+        'nome': 'Índice de Atividade Econômica do Banco Central (IBC-Br)',
+        'unidade': 'índice (média 2002=100)',
+        'frequencia': 'mensal',
+    },
 }
 
 _SOAP_ENVELOPE = (
