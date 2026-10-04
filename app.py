@@ -736,7 +736,28 @@ def pesquisa_consultar():
     data = request.json or {}
     escala = data.get('escala')
     chaves_objetos = data.get('objetos', [])
-    codigo_localidade = data.get('codigo_localidade')
+    # codigo_localidade aceita, do frontend (JSON):
+    #   - uma string/número: uma única localidade (comportamento original);
+    #   - uma lista: várias localidades escolhidas manualmente (ex: Palhoça +
+    #     Florianópolis + Biguaçu), somadas/comparadas no mesmo gráfico;
+    #   - {"dentro_de": {"nivel": "n3"|"n24", "codigo": X}}: "(Todos)" dentro
+    #     de um filtro de UF ou região intermediária, sem listar cada
+    #     município (ex: nivel="n3", codigo=42 = todos os municípios de SC);
+    #   - ausente/None: nenhum filtro de localidade (todas as localidades da
+    #     escala - só faz sentido combinado com uma escala mais agregada,
+    #     como 'uf', já que "todos os municípios do Brasil" é um volume muito
+    #     grande de dado para um único gráfico).
+    codigo_localidade_bruto = data.get('codigo_localidade')
+    if isinstance(codigo_localidade_bruto, dict) and 'dentro_de' in codigo_localidade_bruto:
+        filtro = codigo_localidade_bruto['dentro_de'] or {}
+        codigo_localidade = {'dentro_de': (filtro.get('nivel'), filtro.get('codigo'))}
+    else:
+        codigo_localidade = codigo_localidade_bruto
+    # Agrega a seleção de várias localidades num único ponto (soma ou média,
+    # conforme o indicador) - usado pelo toggle "Ver agregado" do resultado.
+    # A série por localidade sempre volta também, então o frontend consegue
+    # alternar entre as duas visões sem nova consulta.
+    agregar = bool(data.get('agregar'))
     # 'all' (todos os períodos disponíveis) em vez de 'last' (só o mais
     # recente) - confirmado contra a API real do SIDRA que o parâmetro é
     # suportado. Dá à tela de Pesquisa uma série histórica completa por
@@ -756,7 +777,7 @@ def pesquisa_consultar():
         try:
             r = objetos_mod.buscar_serie_objeto(
                 chave, escala, codigo_localidade=codigo_localidade, periodo=periodo,
-                ano_inicio=ano_inicio, ano_fim=ano_fim
+                ano_inicio=ano_inicio, ano_fim=ano_fim, agregar=agregar
             )
             resultados_por_objeto.append(r)
         except ValueError as e:

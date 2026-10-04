@@ -604,7 +604,10 @@
             <div class="form-group" id="pesquisa_localidade_group">
                 <label>Localização</label>
                 <p style="color: var(--cinza-texto); font-size: 12.5px; margin: -4px 0 10px;">
-                    Filtre por região, estado e região imediata para encontrar o município mais rápido.
+                    Filtre por região, estado e região imediata para encontrar municípios mais rápido. Deixe um filtro
+                    em "(Todos)" para incluir tudo daquele nível na consulta - por exemplo, escolher só o estado traz
+                    todos os municípios dele de uma vez. Selecione um ou mais municípios na lista para comparar ou
+                    somar localidades específicas (ex: Palhoça + Florianópolis + Biguaçu).
                 </p>
                 <div class="grid-2" style="gap: 10px; margin-bottom: 10px;">
                     <select id="pesquisa_filtro_regiao" onchange="pesquisa_filtrar_localidade()">
@@ -614,14 +617,18 @@
                         <option value="">Estado (todos)</option>
                     </select>
                 </div>
-                <div class="grid-2" style="gap: 10px;">
+                <div class="grid-2" style="gap: 10px; margin-bottom: 10px;">
                     <select id="pesquisa_filtro_regiao_imediata" onchange="pesquisa_filtrar_localidade()">
                         <option value="">Região imediata (todas)</option>
                     </select>
-                    <select id="pesquisa_municipio">
-                        <option value="">Carregando municípios...</option>
-                    </select>
+                    <div></div>
                 </div>
+                <label for="pesquisa_municipio" style="font-weight: normal; font-size: 13px; color: var(--cinza-texto);">
+                    Municípios (nenhum selecionado = todos os municípios do filtro acima)
+                </label>
+                <select id="pesquisa_municipio" multiple size="8" style="height: auto;" onchange="pesquisa_atualizar_contador_localidades(this.options.length)">
+                    <option value="">Carregando municípios...</option>
+                </select>
             </div>
 
             <div class="form-group" id="pesquisa_periodo_comex_group" style="display: none;">
@@ -1106,8 +1113,15 @@
             const regiaoImediataEscolhida = selectRegiaoImediata.value;
             if (regiaoImediataEscolhida) candidatos = candidatos.filter(m => m.regiao_imediata_nome === regiaoImediataEscolhida);
 
+            // Lista múltipla: nenhum item marcado = "(Todos)" os municípios
+            // do filtro atual. Preserva a seleção de municípios que continuam
+            // válidos depois de estreitar o filtro (ex: trocar de região
+            // imediata não deveria perder uma seleção de município que já
+            // não pertence mais à lista, mas não mexe nos que continuam lá).
             const selectMunicipio = document.getElementById('pesquisa_municipio');
-            const municipioAtual = selectMunicipio.value;
+            const codigosSelecionadosAntes = new Set(
+                Array.from(selectMunicipio.selectedOptions).map(o => o.value)
+            );
             const municipiosOrdenados = [...candidatos].sort((a, b) => a.nome.localeCompare(b.nome));
             selectMunicipio.innerHTML = '';
             if (!municipiosOrdenados.length) {
@@ -1118,9 +1132,31 @@
                 const opt = document.createElement('option');
                 opt.value = m.codigo;
                 opt.textContent = `${m.nome} (${m.uf_sigla})`;
-                if (String(m.codigo) === municipioAtual) opt.selected = true;
+                if (codigosSelecionadosAntes.has(String(m.codigo))) opt.selected = true;
                 selectMunicipio.appendChild(opt);
             });
+
+            pesquisa_atualizar_contador_localidades(candidatos.length);
+        }
+
+        // Mostra quantas localidades a consulta vai atingir com o filtro
+        // atual, para deixar claro o que "(Todos)" significa antes de
+        // pesquisar (ex: "292 municípios no filtro atual").
+        function pesquisa_atualizar_contador_localidades(totalNoFiltro) {
+            const selectMunicipio = document.getElementById('pesquisa_municipio');
+            const nSelecionados = selectMunicipio.selectedOptions.length;
+            let el = document.getElementById('pesquisa_contador_localidades');
+            if (!el) {
+                el = document.createElement('p');
+                el.id = 'pesquisa_contador_localidades';
+                el.style.cssText = 'color: var(--cinza-texto); font-size: 12.5px; margin: 6px 0 0;';
+                selectMunicipio.insertAdjacentElement('afterend', el);
+            }
+            if (nSelecionados > 0) {
+                el.textContent = `${nSelecionados} município${nSelecionados === 1 ? '' : 's'} selecionado${nSelecionados === 1 ? '' : 's'}.`;
+            } else {
+                el.textContent = `Nenhum selecionado - a consulta trará todos os ${totalNoFiltro} municípios deste filtro.`;
+            }
         }
 
         function pesquisa_mudar_escala() {
@@ -1171,6 +1207,49 @@
             document.getElementById('pesquisa_periodo_comex_group').style.display = tem_comex ? '' : 'none';
         }
 
+        // Monta o valor de codigo_localidade a enviar ao backend a partir do
+        // estado atual dos filtros em cascata e da lista de municípios:
+        //   - um ou mais municípios marcados na lista -> array de códigos
+        //     (comparar ou somar localidades específicas, ex: Palhoça +
+        //     Florianópolis + Biguaçu);
+        //   - nenhum município marcado, mas um Estado escolhido -> "(Todos)"
+        //     os municípios daquele Estado, via filtro "dentro_de" (evita
+        //     mandar ~300 códigos manualmente);
+        //   - nenhum município marcado, mas uma Região Imediata ou só a
+        //     Região escolhidas -> "(Todos)" dentro da região imediata (mais
+        //     específico) ou, sem nenhum filtro restante, null (todos os
+        //     municípios do Brasil - só faz sentido para indicadores que
+        //     agregam bem um volume grande de localidades).
+        function pesquisa_montar_codigo_localidade() {
+            const municipiosMarcados = Array.from(document.getElementById('pesquisa_municipio').selectedOptions)
+                .map(o => o.value)
+                .filter(Boolean);
+            if (municipiosMarcados.length === 1) return municipiosMarcados[0];
+            if (municipiosMarcados.length > 1) return municipiosMarcados.map(Number);
+
+            const regiaoImediataNome = document.getElementById('pesquisa_filtro_regiao_imediata').value;
+            if (regiaoImediataNome) {
+                const exemplo = pesquisa_municipios_brasil_cache.find(m => m.regiao_imediata_nome === regiaoImediataNome);
+                if (exemplo && exemplo.regiao_imediata_codigo) {
+                    return {dentro_de: {nivel: 'n25', codigo: exemplo.regiao_imediata_codigo}};
+                }
+            }
+
+            const ufSigla = document.getElementById('pesquisa_filtro_uf').value;
+            if (ufSigla) {
+                const exemplo = pesquisa_municipios_brasil_cache.find(m => m.uf_sigla === ufSigla);
+                if (exemplo && exemplo.uf_codigo) {
+                    return {dentro_de: {nivel: 'n3', codigo: exemplo.uf_codigo}};
+                }
+            }
+
+            // Sem Estado nem Região Imediata escolhidos: a Região (grande
+            // área, ex: "Sul") sozinha ainda cobriria vários Estados de uma
+            // vez, o que o SIDRA não aceita filtrar diretamente neste nível -
+            // nesse caso cai em "todos os municípios do Brasil" (null).
+            return null;
+        }
+
         function pesquisa_consultar() {
             const escala = document.getElementById('pesquisa_escala').value;
             const chaves_selecionadas = Array.from(document.querySelectorAll('.pesquisa_objeto_checkbox:checked')).map(el => el.value);
@@ -1181,9 +1260,9 @@
                 return;
             }
 
-            const payload = {escala, objetos: chaves_selecionadas};
+            const payload = {escala, objetos: chaves_selecionadas, agregar: true};
             if (escala === 'municipio') {
-                payload.codigo_localidade = document.getElementById('pesquisa_municipio').value;
+                payload.codigo_localidade = pesquisa_montar_codigo_localidade();
             }
             const ano_inicio = document.getElementById('pesquisa_ano_inicio').value;
             const ano_fim = document.getElementById('pesquisa_ano_fim').value;
@@ -1206,6 +1285,7 @@
 
         function pesquisa_exibir_resultado(data) {
             const resultadoDiv = document.getElementById('pesquisa_resultado');
+            pesquisa_resultados_cache = {};
             let htmlErros = '';
             if (data.erros && data.erros.length) {
                 data.erros.forEach(e => {
@@ -1227,38 +1307,30 @@
             }
         }
 
-        function pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv) {
-            const bloco = document.createElement('div');
-            bloco.style.marginTop = '28px';
+        // Guarda o resultado de cada objeto pesquisado por canvasId, para o
+        // toggle "Ver separado / Ver agregado" poder re-desenhar o gráfico
+        // na hora (sem nova consulta ao servidor) ao alternar entre a série
+        // por localidade e a série somada/com média.
+        let pesquisa_resultados_cache = {};
 
-            if (!r.serie.length) {
-                bloco.innerHTML = `
-                    <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
-                    <p style="color: var(--cinza-texto);">Nenhum dado retornado.</p>`;
-                resultadoDiv.appendChild(bloco);
-                return;
-            }
-
-            const canvasId = `pesquisa_chart_${indice}`;
-
-            // Decide o tipo de gráfico pelos dados: uma única localidade com
-            // vários períodos é uma série temporal (linha); várias
-            // localidades (ex: municípios de uma região, ou países no comex)
-            // é um corte transversal (barras, maior valor primeiro).
-            const localidadesUnicas = [...new Set(r.serie.map(s => s.localidade))];
+        // Monta a configuração do Chart.js (tipo + dados) a partir de uma
+        // série já resolvida (pode ser a série por localidade ou a série
+        // agregada) - reaproveitada tanto na primeira renderização quanto ao
+        // alternar o toggle.
+        function pesquisa_montar_chart_config(nome, serie) {
+            const localidadesUnicas = [...new Set(serie.map(s => s.localidade))];
             const ehSerieTemporal = localidadesUnicas.length === 1;
-
             let avisoTruncamento = '';
             let chartConfig;
 
             if (ehSerieTemporal) {
-                const pontos = [...r.serie].sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
+                const pontos = [...serie].sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
                 chartConfig = {
                     type: 'line',
                     data: {
                         labels: pontos.map(p => p.periodo),
                         datasets: [{
-                            label: r.nome,
+                            label: nome,
                             data: pontos.map(p => p.valor),
                             borderColor: 'rgba(200, 16, 46, 1)',
                             backgroundColor: 'rgba(200, 16, 46, 0.12)',
@@ -1275,7 +1347,7 @@
                 // intermediária com série histórica) - usamos o período mais
                 // recente de cada uma para o corte transversal do gráfico.
                 const maisRecentePorLocalidade = new Map();
-                r.serie.forEach(item => {
+                serie.forEach(item => {
                     const atual = maisRecentePorLocalidade.get(item.localidade);
                     if (!atual || String(item.periodo) > String(atual.periodo)) {
                         maisRecentePorLocalidade.set(item.localidade, item);
@@ -1290,7 +1362,7 @@
                     data: {
                         labels: pontosGrafico.map(p => p.localidade),
                         datasets: [{
-                            label: r.nome,
+                            label: nome,
                             data: pontosGrafico.map(p => p.valor),
                             backgroundColor: 'rgba(200, 16, 46, 0.78)'
                         }]
@@ -1305,23 +1377,89 @@
                 }
             }
 
+            return {chartConfig, avisoTruncamento};
+        }
+
+        function pesquisa_montar_tabela_html(serie) {
             let tabelaHtml = '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
-            r.serie.slice(0, 500).forEach(item => {
+            serie.slice(0, 500).forEach(item => {
                 const valor = (item.valor === null || item.valor === undefined) ? '-' : item.valor.toLocaleString('pt-BR');
                 tabelaHtml += `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
             });
             tabelaHtml += '</tbody></table>';
-            if (r.serie.length > 500) {
-                tabelaHtml += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 500 de ${r.serie.length} registros.</p>`;
+            if (serie.length > 500) {
+                tabelaHtml += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 500 de ${serie.length} registros.</p>`;
             }
+            return tabelaHtml;
+        }
+
+        // Re-renderiza o gráfico e a tabela de um bloco já existente,
+        // escolhendo entre a série por localidade (separado) e a série
+        // agregada (soma/média), de acordo com o toggle.
+        function pesquisa_alternar_agregacao(canvasId, modo) {
+            const r = pesquisa_resultados_cache[canvasId];
+            if (!r) return;
+            const serie = (modo === 'agregado' && r.serie_agregada) ? r.serie_agregada : r.serie;
+
+            const {chartConfig, avisoTruncamento} = pesquisa_montar_chart_config(r.nome, serie);
+            criar_grafico(canvasId, chartConfig, `${canvasId}_download`);
+
+            const avisoEl = document.getElementById(`${canvasId}_aviso`);
+            if (avisoEl) avisoEl.innerHTML = avisoTruncamento;
+
+            const detalhesEl = document.getElementById(`${canvasId}_detalhe`);
+            if (detalhesEl) {
+                detalhesEl.querySelector('summary').textContent = `Ver dados (${serie.length} registro${serie.length === 1 ? '' : 's'})`;
+                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serie);
+            }
+        }
+
+        function pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv) {
+            const bloco = document.createElement('div');
+            bloco.style.marginTop = '28px';
+
+            if (!r.serie.length) {
+                bloco.innerHTML = `
+                    <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
+                    <p style="color: var(--cinza-texto);">Nenhum dado retornado.</p>`;
+                resultadoDiv.appendChild(bloco);
+                return;
+            }
+
+            const canvasId = `pesquisa_chart_${indice}`;
+            pesquisa_resultados_cache[canvasId] = r;
+
+            // Com várias localidades selecionadas junto, abre já mostrando
+            // cada uma separada (mais informativo por padrão) - o toggle
+            // deixa alternar para o valor somado/com média quando existir
+            // série agregada (sempre que a consulta pediu agregar e há mais
+            // de uma localidade no resultado - ver objetos.py).
+            const serieInicial = r.serie;
+            const {chartConfig, avisoTruncamento} = pesquisa_montar_chart_config(r.nome, serieInicial);
+
+            let toggleHtml = '';
+            if (r.serie_agregada && r.serie_agregada.length) {
+                const rotuloModo = r.modo_agregacao === 'media' ? 'média' : 'soma';
+                toggleHtml = `
+                    <div class="pesquisa-toggle-agregacao" style="margin: 10px 0 14px;">
+                        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                            <input type="checkbox" style="width: auto;"
+                                onchange="pesquisa_alternar_agregacao('${canvasId}', this.checked ? 'agregado' : 'separado')">
+                            Ver localidades agregadas (${rotuloModo} das localidades selecionadas em um só ponto)
+                        </label>
+                    </div>`;
+            }
+
+            const tabelaHtml = pesquisa_montar_tabela_html(serieInicial);
 
             bloco.innerHTML = `
                 <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
                 <div class="chart-container"><canvas id="${canvasId}"></canvas></div>
-                ${avisoTruncamento}
+                <div id="${canvasId}_aviso">${avisoTruncamento}</div>
+                ${toggleHtml}
                 <div id="${canvasId}_download"></div>
-                <details class="pesquisa-dados-detalhe" style="margin-top: 14px;">
-                    <summary>Ver dados (${r.serie.length} registro${r.serie.length === 1 ? '' : 's'})</summary>
+                <details class="pesquisa-dados-detalhe" id="${canvasId}_detalhe" style="margin-top: 14px;">
+                    <summary>Ver dados (${serieInicial.length} registro${serieInicial.length === 1 ? '' : 's'})</summary>
                     <div class="pesquisa-dados-tabela">${tabelaHtml}</div>
                 </details>`;
             resultadoDiv.appendChild(bloco);

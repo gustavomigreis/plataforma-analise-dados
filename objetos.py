@@ -175,19 +175,87 @@ def _nivel_ibge(escala):
     return escala
 
 
+def _modo_agregacao(chave_objeto, info):
+    """
+    Decide se várias localidades selecionadas juntas devem ser agregadas por
+    soma ou por média, quando o usuário pede o valor "aglomerado" em vez de
+    ver cada localidade separada. Contagens/totais (população, PIB,
+    exportações...) somam; índices/razões/idades fazem média. Câmbio e outras
+    séries do BCB não têm localidade múltipla (são sempre nacionais), então
+    isso não se aplica a elas.
+    """
+    if info['fonte'] == 'ibge':
+        return ibge.AGREGACAO_PADRAO.get(info['chave_fonte'], 'soma')
+    if info['fonte'] == 'comex':
+        return 'soma'
+    return 'soma'
+
+
+def _agregar_serie(serie, modo):
+    """
+    Colapsa uma série com várias localidades por período num único ponto por
+    período (rótulo "Selecão agregada (N localidades)"), somando ou tirando a
+    média dos valores de cada localidade naquele período. Períodos onde nem
+    toda localidade tem valor ainda entram no cálculo (ignora None), já que
+    exigir cobertura total descartaria períodos só porque uma localidade
+    started reporting depois - mais útil mostrar o agregado parcial do que
+    nada.
+    """
+    por_periodo = {}
+    localidades_por_periodo = {}
+    for item in serie:
+        periodo = item['periodo']
+        valor = item['valor']
+        if valor is None:
+            continue
+        por_periodo.setdefault(periodo, []).append(valor)
+        localidades_por_periodo.setdefault(periodo, set()).add(item['localidade'])
+
+    total_localidades = len({item['localidade'] for item in serie})
+    agregada = []
+    for periodo, valores in por_periodo.items():
+        if modo == 'media':
+            valor_agregado = sum(valores) / len(valores)
+        else:
+            valor_agregado = sum(valores)
+        n_localidades = len(localidades_por_periodo[periodo])
+        rotulo = f'Seleção agregada ({n_localidades} de {total_localidades} localidades)'
+        agregada.append({'localidade': rotulo, 'periodo': periodo, 'valor': valor_agregado})
+
+    return agregada
+
+
 def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='last',
-                         ano_inicio=None, ano_fim=None):
+                         ano_inicio=None, ano_fim=None, agregar=False):
     """
     Busca os dados de um objeto do catálogo numa escala/localidade dada,
     devolvendo um formato comum independente da fonte:
 
         {'objeto': chave_objeto, 'nome': ..., 'unidade': ..., 'fonte': ...,
-         'serie': [{'localidade': ..., 'periodo': ..., 'valor': ...}, ...]}
+         'serie': [{'localidade': ..., 'periodo': ..., 'valor': ...}, ...],
+         'serie_agregada': [...] ou None,
+         'modo_agregacao': 'soma' | 'media' | None}
 
-    codigo_localidade: necessário para escala 'uf' ou 'municipio' (código
-                        IBGE da UF/município). Ignorado para 'brasil'/'regiao'.
+    codigo_localidade: necessário para escala 'uf' ou 'municipio'. Pode ser:
+                        - um único código (int/str): uma localidade;
+                        - uma lista de códigos: várias localidades
+                          selecionadas manualmente (ex: Palhoça + Florianópolis);
+                        - None: todas as localidades disponíveis na escala
+                          (todos os municípios do Brasil/da UF filtrada, ver
+                          'dentro_de' abaixo) - a opção "(Todos)" dos filtros;
+                        - {'dentro_de': (nivel_pai, codigo_pai)}: todas as
+                          localidades dentro de uma UF ou região intermediária
+                          (ex: {'dentro_de': ('n3', 42)} = todos os municípios
+                          de SC), sem precisar listar cada código.
+                        Ignorado para 'brasil'/'regiao'.
     periodo: usado pela consulta ao SIDRA ('last', 'last 5', ano específico).
     ano_inicio/ano_fim: usados pela consulta ao Comex Stat (strings 'YYYY').
+    agregar: quando True e há mais de uma localidade na série resultante,
+             também devolve 'serie_agregada' com um único ponto por período
+             (soma ou média, conforme o indicador - ver _modo_agregacao).
+             A série original (por localidade) sempre é devolvida também, para
+             permitir alternar entre a visão agregada e a separada no mesmo
+             gráfico sem nova consulta.
     """
     if chave_objeto not in CATALOGO:
         raise ValueError(f'Objeto desconhecido: {chave_objeto}')
@@ -227,7 +295,14 @@ def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='l
         fluxo = info['chave_fonte']['fluxo']
         metrica = info['chave_fonte']['metrica']
         detalhamento = 'municipio' if escala == 'municipio' else 'uf'
-        cod_mun = codigo_localidade if escala == 'municipio' else None
+        # 'dentro_de' não se aplica ao Comex Stat (a consulta já é sempre
+        # restrita à UF fixa do projeto) - só passa adiante código único ou
+        # lista de códigos de município.
+        cod_mun = None
+        if escala == 'municipio' and isinstance(codigo_localidade, dict):
+            cod_mun = None  # "(Todos)" - comportamento padrão da função já traz a UF inteira
+        elif escala == 'municipio':
+            cod_mun = codigo_localidade
         registros = comexstat.buscar_comercio_exterior(
             fluxo, ano_inicio, ano_fim, codigo_municipio=cod_mun,
             detalhamento=detalhamento, metricas=(metrica,)
@@ -240,10 +315,20 @@ def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='l
     else:
         raise ValueError(f'Fonte desconhecida: {fonte}')
 
-    return {
+    resultado = {
         'objeto': chave_objeto,
         'nome': info['nome'],
         'unidade': info['unidade'],
         'fonte': fonte,
         'serie': serie,
+        'serie_agregada': None,
+        'modo_agregacao': None,
     }
+
+    localidades_distintas = {item['localidade'] for item in serie}
+    if agregar and len(localidades_distintas) > 1:
+        modo = _modo_agregacao(chave_objeto, info)
+        resultado['serie_agregada'] = _agregar_serie(serie, modo)
+        resultado['modo_agregacao'] = modo
+
+    return resultado

@@ -116,6 +116,19 @@ INDICADORES = {
     },
 }
 
+# Como agregar o indicador quando o usuário seleciona várias localidades de
+# uma vez (ex: Palhoça + Florianópolis + Biguaçu) e pede o valor "aglomerado"
+# (em vez de ver cada localidade separada no gráfico): soma faz sentido para
+# contagens/totais (população, PIB, nº de empresas, rebanho...), mas não para
+# um índice, razão, idade ou percentual (somar "idade mediana" de 3 cidades
+# não tem significado) - esses são agregados pela média. Indicador sem
+# entrada aqui cai em 'soma' por padrão (a maioria do catálogo é contagem).
+AGREGACAO_PADRAO = {
+    'indice_envelhecimento': 'media',
+    'idade_mediana': 'media',
+    'razao_sexo': 'media',
+}
+
 # Observações sobre domínios pesquisados e NÃO incluídos no catálogo, porque
 # a fonte simplesmente não publica o dado em nível municipal no SIDRA (não é
 # uma limitação desta implementação, é da própria base):
@@ -200,7 +213,14 @@ def montar_url(indicador_key, nivel, codigo_localidade=None, periodo='last'):
 
     indicador_key: uma chave de INDICADORES (ex: 'populacao')
     nivel: uma chave de NIVEIS (ex: 'municipio', 'uf')
-    codigo_localidade: código IBGE da localidade (obrigatório para 'uf' e 'municipio')
+    codigo_localidade: código IBGE da localidade (obrigatório para 'uf' e
+                        'municipio'). Pode ser um único código (int/str) ou
+                        uma lista de códigos - o SIDRA aceita vários códigos
+                        separados por vírgula na mesma consulta (confirmado
+                        contra a API real: t/6579/n6/4205407,4202404/v/9324/p/last
+                        devolve os dois municípios numa única resposta), o
+                        que evita N chamadas separadas para "vários municípios
+                        selecionados" ou "todos os municípios de um estado".
     periodo: 'last', 'last 5', ou um ano específico como '2022'
     """
     if indicador_key not in INDICADORES:
@@ -217,7 +237,22 @@ def montar_url(indicador_key, nivel, codigo_localidade=None, periodo='last'):
     elif nivel in ('uf', 'municipio'):
         if not codigo_localidade:
             raise ValueError(f'nível "{nivel}" exige codigo_localidade')
-        localidade = f'{NIVEIS[nivel]}/{codigo_localidade}'
+        if isinstance(codigo_localidade, dict) and codigo_localidade.get('dentro_de'):
+            # "Todos os municípios de uma UF" (ou de uma UF dentro de uma
+            # região) sem listar código por código - usa o filtro "in" do
+            # SIDRA (sintaxe: n6/in n3 42 = todos os municípios dentro da UF
+            # 42). Confirmado contra a API real (retornou 292 municípios de
+            # SC de uma vez). Evita montar uma URL com ~300 códigos separados
+            # por vírgula quando o usuário só quer "todos os municípios do
+            # estado", que além de mais simples evita estourar o limite
+            # prático de tamanho de URL.
+            nivel_pai, codigo_pai = codigo_localidade['dentro_de']
+            localidade = f'{NIVEIS[nivel]}/in%20{nivel_pai}%20{codigo_pai}'
+        elif isinstance(codigo_localidade, (list, tuple, set)):
+            codigos = ','.join(str(c) for c in codigo_localidade)
+            localidade = f'{NIVEIS[nivel]}/{codigos}'
+        else:
+            localidade = f'{NIVEIS[nivel]}/{codigo_localidade}'
     else:
         raise ValueError(f'Nível territorial desconhecido: {nivel}')
 
@@ -430,6 +465,14 @@ def buscar_municipios_brasil():
             'regiao_nome': regiao.get('nome'),
             'regiao_sigla': regiao.get('sigla'),
             'regiao_imediata_nome': regiao_imediata.get('nome'),
+            'regiao_imediata_codigo': regiao_imediata.get('id'),
+            # Código da região geográfica INTERMEDIÁRIA (nível n24 do SIDRA -
+            # ver NIVEIS['regiao'] acima) - necessário para poder filtrar
+            # "todos os municípios desta região intermediária" via SIDRA
+            # (n6/in n24 <codigo>, confirmado contra a API real) sem ter que
+            # listar cada código de município manualmente.
+            'regiao_intermediaria_codigo': regiao_intermediaria.get('id'),
+            'regiao_intermediaria_nome': regiao_intermediaria.get('nome'),
         })
 
     return resultado

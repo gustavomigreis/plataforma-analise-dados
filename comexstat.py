@@ -59,7 +59,11 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
 
     fluxo: 'exportacao' ou 'importacao'
     ano_inicio, ano_fim: strings 'YYYY' (ex: '2023', '2024')
-    codigo_municipio: código IBGE do município (opcional - se None, traz todos os municípios da UF)
+    codigo_municipio: código IBGE do município (opcional - se None, traz todos os
+                       municípios da UF). Aceita também uma lista de códigos para
+                       filtrar por vários municípios de uma vez (ex: Palhoça +
+                       Florianópolis + Biguaçu) - a API do Comex Stat já aceita
+                       múltiplos valores no mesmo filtro 'city'.
     uf: código da UF (padrão: Santa Catarina)
     detalhamento: chave de DETALHAMENTOS_DISPONIVEIS - define o agrupamento
                   dos resultados (padrão: por município, comportamento original)
@@ -81,7 +85,11 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
 
     filtros = [{'filter': 'state', 'values': [str(uf)]}]
     if codigo_municipio:
-        filtros.append({'filter': 'city', 'values': [str(codigo_municipio)]})
+        if isinstance(codigo_municipio, (list, tuple, set)):
+            valores_municipio = [str(c) for c in codigo_municipio]
+        else:
+            valores_municipio = [str(codigo_municipio)]
+        filtros.append({'filter': 'city', 'values': valores_municipio})
 
     campo_detalhe = DETALHAMENTOS_DISPONIVEIS[detalhamento]
     campos_metricas = [METRICAS_DISPONIVEIS[m] for m in metricas]
