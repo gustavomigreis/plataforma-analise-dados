@@ -307,16 +307,26 @@
            cultura)" dentro de Agropecuária) - evita dezenas de checkboxes
            soltos quando um tema tem uma opção por categoria específica. */
         .pesquisa-subgrupo-detalhe {
-            margin-top: 6px;
+            margin-top: 0;
+        }
+
+        /* Linha do subtema: checkbox do grupo (soma padrão) + seta de
+           expandir para selecionar categorias individuais à parte. */
+        .pesquisa-subgrupo-linha {
+            margin-top: 4px;
+            border-top: 1px dashed var(--cinza-borda, #e0e0e0);
+            padding-top: 4px;
         }
 
         .pesquisa-subgrupo-detalhe summary {
             cursor: pointer;
-            padding: 6px 2px;
+            padding: 6px 6px;
             font-size: 13px;
             font-weight: 600;
             color: var(--cinza-texto);
             list-style: none;
+            min-width: 20px;
+            text-align: center;
         }
 
         .pesquisa-subgrupo-detalhe summary::-webkit-details-marker {
@@ -324,12 +334,12 @@
         }
 
         .pesquisa-subgrupo-detalhe summary::before {
-            content: '▸ ';
+            content: '▸';
             color: var(--vermelho);
         }
 
         .pesquisa-subgrupo-detalhe[open] summary::before {
-            content: '▾ ';
+            content: '▾';
         }
 
         .pesquisa-subgrupo-itens {
@@ -1232,10 +1242,12 @@
                 }
             });
 
-            function pesquisa_renderizar_checkbox_objeto(obj) {
+            function pesquisa_renderizar_checkbox_objeto(obj, extraClasse) {
+                const classeExtra = extraClasse ? ` ${extraClasse}` : '';
                 return `
                     <label style="display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer;">
-                        <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
+                        <input type="checkbox" value="${obj.chave}" data-subgrupo="${obj.subgrupo || ''}" data-eh-grupo="${obj.eh_grupo ? '1' : '0'}"
+                               class="pesquisa_objeto_checkbox${classeExtra}" style="width: auto; flex-shrink: 0;">
                         <span style="font-size: 13.5px;">${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
                     </label>`;
             }
@@ -1246,13 +1258,29 @@
                     <div class="pesquisa-tema-titulo">${temaNome}</div>`;
                 grupoTema.diretos.forEach(obj => { html += pesquisa_renderizar_checkbox_objeto(obj); });
                 for (const [subgrupoNome, objs] of grupoTema.subgrupos) {
+                    // O item "grupo" (soma de todas as categorias, ex: "Todos
+                    // os Tipos") é o padrão visível junto do título do
+                    // subtema - marcar esse checkbox já traz a soma geral,
+                    // sem precisar abrir a seta. A seta só abre para
+                    // selecionar categorias individuais (ex: só Bovino +
+                    // Bubalino), que por sua vez disparam o modo de
+                    // visualização de 3 opções no resultado (ver
+                    // pesquisa_renderizar_bloco_objeto).
+                    const objGrupo = objs.find(o => o.eh_grupo);
+                    const objsIndividuais = objs.filter(o => !o.eh_grupo);
                     html += `
-                        <details class="pesquisa-subgrupo-detalhe">
-                            <summary>${subgrupoNome} (${objs.length})</summary>
-                            <div class="pesquisa-subgrupo-itens">
-                                ${objs.map(pesquisa_renderizar_checkbox_objeto).join('')}
+                        <div class="pesquisa-subgrupo-linha" style="display: flex; align-items: center; gap: 4px;">
+                            <div style="flex: 1 1 auto;">
+                                ${objGrupo ? pesquisa_renderizar_checkbox_objeto(objGrupo) : `<span style="font-size: 13.5px; padding: 5px 2px; display: block;">${subgrupoNome}</span>`}
                             </div>
-                        </details>`;
+                            <details class="pesquisa-subgrupo-detalhe" style="flex: 0 0 auto;">
+                                <summary title="Selecionar categorias específicas (${objsIndividuais.length})"></summary>
+                                <div class="pesquisa-subgrupo-itens">
+                                    <div style="font-size: 12px; color: var(--cinza-texto); padding: 2px 2px 6px;">Categorias individuais de ${subgrupoNome.replace(/\s*\(.*\)$/, '')}:</div>
+                                    ${objsIndividuais.map(o => pesquisa_renderizar_checkbox_objeto(o, 'pesquisa_objeto_checkbox_individual')).join('')}
+                                </div>
+                            </details>
+                        </div>`;
                 }
                 html += '</div>';
             }
@@ -1351,11 +1379,46 @@
             }
             resultadoDiv.innerHTML = htmlErros;
 
+            // Quando o usuário marcou 2+ categorias INDIVIDUAIS do mesmo
+            // subtema (ex: só Bovino + Bubalino, via a seta de expandir, sem
+            // usar o checkbox do grupo "Todos os Tipos"), oferece os 3 modos
+            // de visualização em vez de um bloco por objeto: Total (soma),
+            // Por categoria no mesmo gráfico, ou Gráficos separados (o
+            // comportamento normal abaixo). Objetos sem subtema, ou sozinhos
+            // dentro do seu subtema nesta consulta, seguem o fluxo normal.
+            const porSubgrupo = new Map();
+            const resultadosNormais = [];
+            data.resultados.forEach(r => {
+                const infoCatalogo = pesquisa_catalogo_cache.find(o => o.chave === r.objeto);
+                const subgrupo = infoCatalogo && !infoCatalogo.eh_grupo ? infoCatalogo.subgrupo : null;
+                if (subgrupo) {
+                    if (!porSubgrupo.has(subgrupo)) porSubgrupo.set(subgrupo, []);
+                    porSubgrupo.get(subgrupo).push(r);
+                } else {
+                    resultadosNormais.push(r);
+                }
+            });
+
+            let indice = 0;
             // Cada objeto vira seu próprio bloco: gráfico primeiro (já aberto),
             // dados brutos depois, recolhidos dentro de um <details> que o
             // usuário expande tocando - evita que uma tabela longa empurre o
             // gráfico (e os próximos objetos) para fora da primeira tela.
-            data.resultados.forEach((r, indice) => pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv));
+            for (const [subgrupo, resultadosGrupo] of porSubgrupo) {
+                if (resultadosGrupo.length >= 2) {
+                    pesquisa_renderizar_bloco_multicategoria(resultadosGrupo, indice, resultadoDiv);
+                    indice += resultadosGrupo.length;
+                } else {
+                    resultadosGrupo.forEach(r => {
+                        pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv);
+                        indice += 1;
+                    });
+                }
+            }
+            resultadosNormais.forEach(r => {
+                pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv);
+                indice += 1;
+            });
 
             if (data.analises) {
                 const blocoAnalises = document.createElement('div');
@@ -1517,6 +1580,216 @@
                 <div id="${canvasId}_download"></div>
                 <details class="pesquisa-dados-detalhe" id="${canvasId}_detalhe" style="margin-top: 14px;">
                     <summary>Ver dados (${serieInicial.length} registro${serieInicial.length === 1 ? '' : 's'})</summary>
+                    <div class="pesquisa-dados-tabela">${tabelaHtml}</div>
+                </details>`;
+            resultadoDiv.appendChild(bloco);
+
+            criar_grafico(canvasId, chartConfig, `${canvasId}_download`);
+        }
+
+        // Paleta fixa para distinguir categorias no modo "mesmo gráfico" -
+        // cores suficientes para o maior subtema atual (Lavouras, 37
+        // categorias) sem repetir num mesmo gráfico até esse tamanho; acima
+        // disso repete o ciclo (ainda assim distinguível pela legenda).
+        const PESQUISA_PALETA_CATEGORIAS = [
+            'rgba(200, 16, 46, 1)', 'rgba(26, 115, 190, 1)', 'rgba(60, 160, 60, 1)',
+            'rgba(230, 150, 20, 1)', 'rgba(130, 70, 180, 1)', 'rgba(20, 150, 150, 1)',
+            'rgba(180, 90, 40, 1)', 'rgba(90, 90, 90, 1)', 'rgba(210, 60, 140, 1)',
+            'rgba(70, 130, 60, 1)',
+        ];
+
+        // Soma, por período (série temporal) ou por localidade (corte
+        // transversal), os valores de várias séries de categorias diferentes
+        // num único ponto - usado pelo modo "Total" do bloco multicategoria.
+        // Mesma lógica de soma de _agregar_serie no backend (objetos.py),
+        // mas aqui soma entre CATEGORIAS (eixo diferente: ali é entre
+        // localidades de um mesmo objeto).
+        function pesquisa_somar_series_categorias(resultados) {
+            const porChave = new Map();
+            const ehSerieTemporal = new Set(resultados[0].serie.map(s => s.localidade)).size === 1
+                && resultados.every(r => new Set(r.serie.map(s => s.localidade)).size === 1);
+            resultados.forEach(r => {
+                r.serie.forEach(item => {
+                    const chave = ehSerieTemporal ? item.periodo : item.localidade;
+                    if (item.valor === null || item.valor === undefined) return;
+                    if (!porChave.has(chave)) porChave.set(chave, {localidade: item.localidade, periodo: item.periodo, valor: 0});
+                    porChave.get(chave).valor += item.valor;
+                });
+            });
+            return [...porChave.values()];
+        }
+
+        // Monta um chartConfig com UMA linha/barra por categoria, todas no
+        // mesmo bloco de gráfico (modo "Por categoria no mesmo gráfico").
+        // Decide série temporal vs. corte transversal da mesma forma que
+        // pesquisa_montar_chart_config, mas olhando o conjunto de resultados.
+        function pesquisa_montar_chart_config_multicategoria(resultados) {
+            const ehSerieTemporal = resultados.every(r => new Set(r.serie.map(s => s.localidade)).size === 1);
+            let chartConfig;
+            let avisoTruncamento = '';
+
+            if (ehSerieTemporal) {
+                const todosPeriodos = [...new Set(resultados.flatMap(r => r.serie.map(s => s.periodo)))]
+                    .sort((a, b) => String(a).localeCompare(String(b)));
+                chartConfig = {
+                    type: 'line',
+                    data: {
+                        labels: todosPeriodos,
+                        datasets: resultados.map((r, i) => {
+                            const porPeriodo = new Map(r.serie.map(s => [s.periodo, s.valor]));
+                            const cor = PESQUISA_PALETA_CATEGORIAS[i % PESQUISA_PALETA_CATEGORIAS.length];
+                            return {
+                                label: r.nome,
+                                data: todosPeriodos.map(p => porPeriodo.has(p) ? porPeriodo.get(p) : null),
+                                borderColor: cor,
+                                backgroundColor: cor.replace(', 1)', ', 0.12)'),
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.15,
+                                pointRadius: todosPeriodos.length > 40 ? 0 : 3,
+                                spanGaps: true,
+                            };
+                        })
+                    },
+                    options: {scales: {y: {beginAtZero: false}}}
+                };
+            } else {
+                // Corte transversal: uma categoria por dataset, localidades no
+                // eixo X - gráfico de barras agrupadas. Limita às localidades
+                // com maior valor somado (entre categorias) para não poluir.
+                const LIMITE_GRAFICO = 20;
+                const somaPorLocalidade = new Map();
+                resultados.forEach(r => {
+                    r.serie.forEach(item => {
+                        if (item.valor === null || item.valor === undefined) return;
+                        somaPorLocalidade.set(item.localidade, (somaPorLocalidade.get(item.localidade) || 0) + item.valor);
+                    });
+                });
+                const localidadesOrdenadas = [...somaPorLocalidade.keys()]
+                    .sort((a, b) => somaPorLocalidade.get(b) - somaPorLocalidade.get(a));
+                const localidadesGrafico = localidadesOrdenadas.slice(0, LIMITE_GRAFICO);
+
+                chartConfig = {
+                    type: 'bar',
+                    data: {
+                        labels: localidadesGrafico,
+                        datasets: resultados.map((r, i) => {
+                            const porLocalidade = new Map(r.serie.map(s => [s.localidade, s.valor]));
+                            const cor = PESQUISA_PALETA_CATEGORIAS[i % PESQUISA_PALETA_CATEGORIAS.length];
+                            return {
+                                label: r.nome,
+                                data: localidadesGrafico.map(loc => porLocalidade.has(loc) ? porLocalidade.get(loc) : null),
+                                backgroundColor: cor.replace(', 1)', ', 0.78)'),
+                            };
+                        })
+                    },
+                    options: {scales: {y: {beginAtZero: true}}}
+                };
+
+                if (localidadesOrdenadas.length > LIMITE_GRAFICO) {
+                    avisoTruncamento = `<p style="font-size: 13px; color: var(--cinza-texto); margin-top: -10px;">
+                        Mostrando as ${LIMITE_GRAFICO} maiores localidades (de ${localidadesOrdenadas.length}). Veja todas nos dados abaixo.
+                    </p>`;
+                }
+            }
+
+            return {chartConfig, avisoTruncamento};
+        }
+
+        // Re-renderiza o bloco multicategoria ao alternar entre os 3 modos:
+        // 'total' (soma todas as categorias em uma linha/barra só),
+        // 'mesmo_grafico' (uma linha/barra por categoria, mesmo bloco) ou
+        // 'separado' (desmonta o bloco combinado e volta ao comportamento
+        // padrão de um bloco por objeto, cada um com seu próprio gráfico).
+        function pesquisa_alternar_modo_multicategoria(blocoId, modo) {
+            const estado = pesquisa_resultados_cache[blocoId];
+            if (!estado) return;
+            const {resultados} = estado;
+
+            if (modo === 'separado') {
+                const marcador = document.getElementById(blocoId);
+                const container = marcador.parentElement;
+                resultados.forEach((r, i) => {
+                    pesquisa_renderizar_bloco_objeto(r, `${blocoId}_sep${i}`, container);
+                });
+                marcador.remove();
+                return;
+            }
+
+            const canvasId = `${blocoId}_canvas`;
+            let chartConfig, avisoTruncamento, serieParaTabela, nomeParaTabela;
+
+            if (modo === 'total') {
+                const serieSoma = pesquisa_somar_series_categorias(resultados);
+                nomeParaTabela = estado.nomeTotal;
+                ({chartConfig, avisoTruncamento} = pesquisa_montar_chart_config(nomeParaTabela, serieSoma));
+                serieParaTabela = serieSoma;
+            } else {
+                ({chartConfig, avisoTruncamento} = pesquisa_montar_chart_config_multicategoria(resultados));
+                serieParaTabela = resultados.flatMap(r => r.serie.map(s => ({...s, categoria: r.nome})));
+                nomeParaTabela = null;
+            }
+
+            criar_grafico(canvasId, chartConfig, `${canvasId}_download`);
+            const avisoEl = document.getElementById(`${blocoId}_aviso`);
+            if (avisoEl) avisoEl.innerHTML = avisoTruncamento;
+
+            const detalhesEl = document.getElementById(`${blocoId}_detalhe`);
+            if (detalhesEl) {
+                detalhesEl.querySelector('summary').textContent = `Ver dados (${serieParaTabela.length} registro${serieParaTabela.length === 1 ? '' : 's'})`;
+                detalhesEl.querySelector('.pesquisa-dados-tabela').innerHTML = pesquisa_montar_tabela_html(serieParaTabela);
+            }
+        }
+
+        // Bloco combinado para quando 2+ categorias individuais do mesmo
+        // subtema foram selecionadas (ex: Bovino + Bubalino, via a seta de
+        // expandir). Abre por padrão no modo "Total" (soma), com um
+        // controle para trocar para "Por categoria no mesmo gráfico" ou
+        // "Gráficos separados" - ver confirmação do usuário (3 modos, para
+        // série temporal e corte transversal).
+        function pesquisa_renderizar_bloco_multicategoria(resultados, indiceBase, resultadoDiv) {
+            const blocoId = `pesquisa_multicat_${indiceBase}`;
+            const unidade = resultados[0].unidade;
+            const nomesBase = resultados.map(r => r.nome.split(' - ').pop());
+            const nomeTotal = `${resultados[0].nome.split(' - ')[0]} - Total (${nomesBase.join(' + ')})`;
+
+            pesquisa_resultados_cache[blocoId] = {resultados, nomeTotal};
+
+            const serieSoma = pesquisa_somar_series_categorias(resultados);
+            const {chartConfig, avisoTruncamento} = pesquisa_montar_chart_config(nomeTotal, serieSoma);
+            const canvasId = `${blocoId}_canvas`;
+            const tabelaHtml = pesquisa_montar_tabela_html(serieSoma);
+
+            const bloco = document.createElement('div');
+            bloco.id = blocoId;
+            bloco.style.marginTop = '28px';
+            bloco.innerHTML = `
+                <h3>${nomeTotal} <span style="font-size: 13px; color: var(--cinza-texto);">(${unidade})</span></h3>
+                <p style="font-size: 13px; color: var(--cinza-texto); margin-top: -6px;">
+                    ${resultados.length} categorias selecionadas: ${resultados.map(r => r.nome.split(' - ').pop()).join(', ')}
+                </p>
+                <div class="pesquisa-modo-multicategoria" style="margin: 8px 0 14px; display: flex; gap: 14px; flex-wrap: wrap;">
+                    <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                        <input type="radio" name="${blocoId}_modo" value="total" checked style="width: auto;"
+                            onchange="pesquisa_alternar_modo_multicategoria('${blocoId}', 'total')">
+                        Total (soma de todas as categorias)
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                        <input type="radio" name="${blocoId}_modo" value="mesmo_grafico" style="width: auto;"
+                            onchange="pesquisa_alternar_modo_multicategoria('${blocoId}', 'mesmo_grafico')">
+                        Por categoria no mesmo gráfico
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;">
+                        <input type="radio" name="${blocoId}_modo" value="separado" style="width: auto;"
+                            onchange="pesquisa_alternar_modo_multicategoria('${blocoId}', 'separado')">
+                        Gráficos separados (um por categoria)
+                    </label>
+                </div>
+                <div class="chart-container"><canvas id="${canvasId}"></canvas></div>
+                <div id="${blocoId}_aviso">${avisoTruncamento}</div>
+                <div id="${canvasId}_download"></div>
+                <details class="pesquisa-dados-detalhe" id="${blocoId}_detalhe" style="margin-top: 14px;">
+                    <summary>Ver dados (${serieSoma.length} registro${serieSoma.length === 1 ? '' : 's'})</summary>
                     <div class="pesquisa-dados-tabela">${tabelaHtml}</div>
                 </details>`;
             resultadoDiv.appendChild(bloco);

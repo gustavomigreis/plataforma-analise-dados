@@ -125,10 +125,14 @@ _PAM_CULTURAS_SC = [
 ]
 
 # Métrica de cada "objeto" PAM gerado por cultura: variável SIDRA + unidade.
+# Cada métrica tem seu PRÓPRIO subgrupo (pam_lavouras_<métrica>), não um
+# "pam_lavouras" único - área (hectares), valor (mil reais) e quantidade
+# (toneladas) não podem ser somadas juntas num mesmo indicador-grupo, cada
+# uma precisa do seu próprio "Todas as Culturas".
 _PAM_METRICAS = {
-    'area_plantada': {'sufixo': 'Área Plantada ou Destinada à Colheita', 'variavel': 8331, 'unidade': 'hectares'},
-    'valor_producao': {'sufixo': 'Valor da Produção', 'variavel': 215, 'unidade': 'mil reais'},
-    'quantidade_produzida': {'sufixo': 'Quantidade Produzida', 'variavel': 214, 'unidade': 'toneladas'},
+    'area_plantada': {'sufixo': 'Área Plantada ou Destinada à Colheita', 'variavel': 8331, 'unidade': 'hectares', 'subgrupo_nome': 'Área Plantada (por cultura)'},
+    'valor_producao': {'sufixo': 'Valor da Produção', 'variavel': 215, 'unidade': 'mil reais', 'subgrupo_nome': 'Valor da Produção (por cultura)'},
+    'quantidade_produzida': {'sufixo': 'Quantidade Produzida', 'variavel': 214, 'unidade': 'toneladas', 'subgrupo_nome': 'Quantidade Produzida (por cultura)'},
 }
 
 for _metrica_chave, _metrica_info in _PAM_METRICAS.items():
@@ -142,21 +146,31 @@ for _metrica_chave, _metrica_info in _PAM_METRICAS.items():
             'classificacao': f'c782/{_cod_cultura}',
             # Usado pelo catálogo (objetos.py) para agrupar estes itens como
             # um subtema expansível "Lavouras" em vez de uma lista plana.
-            'subgrupo': 'pam_lavouras',
-            'subgrupo_nome': 'Lavouras (por cultura)',
+            'subgrupo': f'pam_lavouras_{_metrica_chave}',
+            'subgrupo_nome': _metrica_info['subgrupo_nome'],
+            # Cada cultura é independente (não há subtotal dentro de outra
+            # cultura nesta tabela), então todas entram na soma do grupo.
+            'soma_grupo': True,
         }
 
 # Tipos de rebanho da PPM (tabela 3939, classificação c79) - confirmado
 # contra a API real/metadados do SIDRA, são só estas 10 categorias (mais
-# "0 Total", que não existe como opção válida nesta tabela).
+# "0 Total", que não existe como opção válida nesta tabela). "Suíno -
+# matrizes de suínos" e "Galináceos - galinhas" são SUBCONJUNTOS de "Suíno -
+# total" e "Galináceos - total" respectivamente (confirmado contra a API
+# real: matrizes=1170 cabe dentro de total=4370 na mesma localidade/ano) -
+# por isso ficam marcadas como 'soma_grupo': False, para não contar em
+# dobro no indicador-grupo "Efetivo de Rebanhos - Todos os tipos" (ver
+# _gerar_indicador_grupo abaixo). Continuam aparecendo normalmente como
+# opção individual dentro do subgrupo expansível.
 _PPM_TIPOS_REBANHO = [
-    (2670, 'Bovino'), (2675, 'Bubalino'), (2672, 'Equino'),
-    (32794, 'Suíno - total'), (32795, 'Suíno - matrizes de suínos'),
-    (2681, 'Caprino'), (2677, 'Ovino'), (32796, 'Galináceos - total'),
-    (32793, 'Galináceos - galinhas'), (2680, 'Codornas'),
+    (2670, 'Bovino', True), (2675, 'Bubalino', True), (2672, 'Equino', True),
+    (32794, 'Suíno - total', True), (32795, 'Suíno - matrizes de suínos', False),
+    (2681, 'Caprino', True), (2677, 'Ovino', True), (32796, 'Galináceos - total', True),
+    (32793, 'Galináceos - galinhas', False), (2680, 'Codornas', True),
 ]
 
-for _cod_rebanho, _nome_rebanho in _PPM_TIPOS_REBANHO:
+for _cod_rebanho, _nome_rebanho, _entra_no_total in _PPM_TIPOS_REBANHO:
     _chave = f'ppm_efetivo_{_cod_rebanho}'
     INDICADORES[_chave] = {
         'nome': f'Efetivo de Rebanhos - {_nome_rebanho}',
@@ -166,7 +180,69 @@ for _cod_rebanho, _nome_rebanho in _PPM_TIPOS_REBANHO:
         'classificacao': f'c79/{_cod_rebanho}',
         'subgrupo': 'ppm_criacao',
         'subgrupo_nome': 'Criação (por tipo de rebanho)',
+        'soma_grupo': _entra_no_total,
     }
+
+# Para cada subgrupo expansível (Lavouras, Criação), gera um indicador
+# "grupo" que soma as categorias marcadas 'soma_grupo': True - é o item que
+# aparece como o checkbox PADRÃO do subtema (fora da seta de expandir),
+# representando "todas as categorias somadas" sem o usuário precisar abrir
+# a lista e marcar uma por uma. SUBGRUPOS guarda, para cada subgrupo, a
+# chave do indicador-grupo e a lista de chaves de categoria que ele soma -
+# usado por objetos.py tanto para resolver a consulta do grupo (busca cada
+# categoria membro e soma) quanto para popular a tela de Pesquisa.
+SUBGRUPOS = {}
+for _chave_ind, _info_ind in list(INDICADORES.items()):
+    _subgrupo = _info_ind.get('subgrupo')
+    if not _subgrupo:
+        continue
+    SUBGRUPOS.setdefault(_subgrupo, {
+        'nome': _info_ind['subgrupo_nome'],
+        'unidade': _info_ind['unidade'],
+        'membros_soma': [],
+        'membros_todos': [],
+    })
+    SUBGRUPOS[_subgrupo]['membros_todos'].append(_chave_ind)
+    if _info_ind.get('soma_grupo'):
+        SUBGRUPOS[_subgrupo]['membros_soma'].append(_chave_ind)
+
+# Nome de exibição do indicador-grupo por subgrupo (a soma de "Lavouras"
+# chama-se "Quantidade Produzida - Todas as Culturas", não um nome
+# genérico). Prefixo porque cada métrica PAM tem seu próprio subgrupo
+# (pam_lavouras_area_plantada, pam_lavouras_valor_producao, ...).
+_NOME_GRUPO_POR_SUBGRUPO = {
+    'ppm_criacao': 'Todos os Tipos',
+}
+
+
+def _nome_grupo_padrao(subgrupo_chave):
+    if subgrupo_chave in _NOME_GRUPO_POR_SUBGRUPO:
+        return _NOME_GRUPO_POR_SUBGRUPO[subgrupo_chave]
+    if subgrupo_chave.startswith('pam_lavouras'):
+        return 'Todas as Culturas'
+    return 'Todas as Categorias'
+
+for _subgrupo_chave, _subgrupo_info in SUBGRUPOS.items():
+    _chave_grupo = f'{_subgrupo_chave}_grupo'
+    _sufixo_nome = _nome_grupo_padrao(_subgrupo_chave)
+    # O nome-base (antes do " - <categoria>") é igual em todo membro do
+    # subgrupo (ex: "Quantidade Produzida", "Efetivo de Rebanhos") - usa o
+    # primeiro membro como referência para montar o nome do indicador-grupo.
+    _nome_base = INDICADORES[_subgrupo_info['membros_todos'][0]]['nome'].rsplit(' - ', 1)[0]
+    INDICADORES[_chave_grupo] = {
+        'nome': f'{_nome_base} - {_sufixo_nome}',
+        'unidade': _subgrupo_info['unidade'],
+        # Indicador-grupo não aponta para uma única tabela/variável do SIDRA
+        # - é resolvido em objetos.py somando os membros (ver
+        # buscar_serie_objeto). 'tabela'/'variavel' ficam None só para
+        # manter a mesma forma de dict dos demais indicadores.
+        'tabela': None,
+        'variavel': None,
+        'eh_grupo': True,
+        'subgrupo': _subgrupo_chave,
+        'subgrupo_nome': _subgrupo_info['nome'],
+    }
+    SUBGRUPOS[_subgrupo_chave]['chave_indicador_grupo'] = _chave_grupo
 
 # Como agregar o indicador quando o usuário seleciona várias localidades de
 # uma vez (ex: Palhoça + Florianópolis + Biguaçu) e pede o valor "aglomerado"

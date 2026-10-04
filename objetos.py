@@ -134,6 +134,12 @@ def _construir_catalogo():
             # Agropecuária) em vez de uma lista plana de dezenas de opções.
             'subgrupo': info.get('subgrupo'),
             'subgrupo_nome': info.get('subgrupo_nome'),
+            # True para o indicador-grupo gerado por subgrupo (soma de
+            # todas as categorias, ex: "Efetivo de Rebanhos - Todos os
+            # Tipos") - a tela de Pesquisa usa isso para exibi-lo como o
+            # checkbox padrão do subtema (fora da seta de expandir), em vez
+            # de dentro da lista de categorias individuais.
+            'eh_grupo': info.get('eh_grupo', False),
         }
 
     for chave, info in bcb.INDICADORES.items():
@@ -189,8 +195,13 @@ def listar_objetos(escala=None):
             'tema_nome': TEMAS.get(info['tema'], 'Outros'),
             'subgrupo': info.get('subgrupo'),
             'subgrupo_nome': info.get('subgrupo_nome'),
+            'eh_grupo': info.get('eh_grupo', False),
         })
-    return sorted(itens, key=lambda x: (x['tema_nome'], x.get('subgrupo_nome') or '', x['nome']))
+    # Indicador-grupo primeiro dentro do subgrupo (chave ordenação
+    # secundária 0 vs 1), já que ele é o item "padrão" exibido fora da seta
+    # de expandir - os membros individuais (dentro do <details>) ficam
+    # ordenados por nome em seguida.
+    return sorted(itens, key=lambda x: (x['tema_nome'], x.get('subgrupo_nome') or '', 0 if x['eh_grupo'] else 1, x['nome']))
 
 
 def _nivel_ibge(escala):
@@ -296,25 +307,61 @@ def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='l
 
     if fonte == 'ibge':
         nivel = _nivel_ibge(escala)
-        try:
-            dados = ibge.buscar_dados(info['chave_fonte'], nivel, codigo_localidade, periodo)
-        except ValueError:
-            # Tabela não publica este indicador em nível de região
-            # intermediária (comum em PAM/PPM - confirmado contra a API
-            # real). Em vez de propagar o erro "indisponível nesta escala",
-            # soma/agrega o dado a partir dos municípios de cada região -
-            # ver ibge.buscar_dados_agregado_por_regiao. Só faz sentido para
-            # a escala 'regiao' (não há fallback ascendente sensato para
-            # 'uf' ou 'brasil' a partir de milhares de municípios de uma vez
-            # sem um filtro territorial, e essas escalas normalmente já têm
-            # dado direto da fonte quando município tem).
-            if nivel != 'regiao':
-                raise
-            dados = ibge.buscar_dados_agregado_por_regiao(info['chave_fonte'], periodo)
-        serie = [
-            {'localidade': d['localidade'], 'periodo': d['periodo'], 'valor': d['valor']}
-            for d in dados
-        ]
+        indicador_ibge = ibge.INDICADORES[info['chave_fonte']]
+
+        def _buscar_dados_indicador(chave_indicador):
+            """
+            Busca os dados de UM indicador IBGE (não-grupo) na escala/
+            localidade/período dados, com o mesmo fallback de agregação por
+            região já usado para o caso normal (ver comentário abaixo).
+            """
+            try:
+                return ibge.buscar_dados(chave_indicador, nivel, codigo_localidade, periodo)
+            except ValueError:
+                # Tabela não publica este indicador em nível de região
+                # intermediária (comum em PAM/PPM - confirmado contra a API
+                # real). Em vez de propagar o erro "indisponível nesta
+                # escala", soma/agrega o dado a partir dos municípios de cada
+                # região - ver ibge.buscar_dados_agregado_por_regiao. Só faz
+                # sentido para a escala 'regiao' (não há fallback ascendente
+                # sensato para 'uf' ou 'brasil' a partir de milhares de
+                # municípios de uma vez sem um filtro territorial, e essas
+                # escalas normalmente já têm dado direto da fonte quando
+                # município tem).
+                if nivel != 'regiao':
+                    raise
+                return ibge.buscar_dados_agregado_por_regiao(chave_indicador, periodo)
+
+        if indicador_ibge.get('eh_grupo'):
+            # Indicador-grupo (ex: "Efetivo de Rebanhos - Todos os Tipos"):
+            # não tem tabela/variável própria no SIDRA - é a SOMA dos
+            # indicadores-membro marcados 'soma_grupo' (exclui categorias que
+            # seriam subconjunto de outra, como "Suíno - matrizes" dentro de
+            # "Suíno - total", para não contar em dobro). Busca cada membro
+            # separadamente e soma por (localidade, período).
+            subgrupo_chave = indicador_ibge['subgrupo']
+            membros = ibge.SUBGRUPOS[subgrupo_chave]['membros_soma']
+            soma_por_chave = {}
+            ordem_chaves = []
+            for chave_membro in membros:
+                for item in _buscar_dados_indicador(chave_membro):
+                    if item['valor'] is None:
+                        continue
+                    chave_ponto = (item['localidade'], item['periodo'])
+                    if chave_ponto not in soma_por_chave:
+                        soma_por_chave[chave_ponto] = 0
+                        ordem_chaves.append(chave_ponto)
+                    soma_por_chave[chave_ponto] += item['valor']
+            serie = [
+                {'localidade': loc, 'periodo': per, 'valor': soma_por_chave[(loc, per)]}
+                for (loc, per) in ordem_chaves
+            ]
+        else:
+            dados = _buscar_dados_indicador(info['chave_fonte'])
+            serie = [
+                {'localidade': d['localidade'], 'periodo': d['periodo'], 'valor': d['valor']}
+                for d in dados
+            ]
 
     elif fonte == 'bcb':
         # BCB é sempre série nacional - localidade fixa "Brasil". Pede uma
