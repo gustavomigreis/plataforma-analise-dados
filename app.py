@@ -737,7 +737,11 @@ def pesquisa_consultar():
     escala = data.get('escala')
     chaves_objetos = data.get('objetos', [])
     codigo_localidade = data.get('codigo_localidade')
-    periodo = data.get('periodo', 'last')
+    # 'all' (todos os períodos disponíveis) em vez de 'last' (só o mais
+    # recente) - confirmado contra a API real do SIDRA que o parâmetro é
+    # suportado. Dá à tela de Pesquisa uma série histórica completa por
+    # padrão, em vez de um único ponto, o que faz sentido para o gráfico.
+    periodo = data.get('periodo', 'all')
     ano_inicio = data.get('ano_inicio')
     ano_fim = data.get('ano_fim')
 

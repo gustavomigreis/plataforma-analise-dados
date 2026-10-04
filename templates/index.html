@@ -303,6 +303,39 @@
             }
         }
 
+        /* Bloco de dados brutos por objeto na tela de Pesquisa - recolhido
+           por padrão (o gráfico já vem aberto acima), expande ao tocar. */
+        .pesquisa-dados-detalhe summary {
+            cursor: pointer;
+            padding: 10px 12px;
+            border: 1px solid var(--cinza-linha);
+            font-weight: 600;
+            font-size: 13.5px;
+            color: var(--preto);
+            list-style: none;
+        }
+
+        .pesquisa-dados-detalhe summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .pesquisa-dados-detalhe summary::before {
+            content: '▸ ';
+            color: var(--vermelho);
+        }
+
+        .pesquisa-dados-detalhe[open] summary::before {
+            content: '▾ ';
+        }
+
+        .pesquisa-dados-detalhe .pesquisa-dados-tabela {
+            border: 1px solid var(--cinza-linha);
+            border-top: none;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
         .form-group label {
             display: block;
             margin-bottom: 8px;
@@ -563,7 +596,7 @@
                 <select id="pesquisa_escala" onchange="pesquisa_mudar_escala()">
                     <option value="municipio">Município</option>
                     <option value="uf">Unidade Federativa</option>
-                    <option value="regiao">Região</option>
+                    <option value="regiao">Região Intermediária (ex: região de Florianópolis, de Chapecó)</option>
                     <option value="brasil">Brasil</option>
                 </select>
             </div>
@@ -594,8 +627,8 @@
             <div class="form-group" id="pesquisa_periodo_comex_group" style="display: none;">
                 <label>Período (Comércio Exterior)</label>
                 <div style="display: flex; gap: 10px;">
-                    <input type="text" id="pesquisa_ano_inicio" placeholder="Ano início (ex: 2023)" style="flex: 1;">
-                    <input type="text" id="pesquisa_ano_fim" placeholder="Ano fim (ex: 2024)" style="flex: 1;">
+                    <select id="pesquisa_ano_inicio" style="flex: 1;"></select>
+                    <select id="pesquisa_ano_fim" style="flex: 1;"></select>
                 </div>
             </div>
 
@@ -987,6 +1020,35 @@
                     const select = document.getElementById('pesquisa_municipio');
                     if (select) select.innerHTML = '<option value="">Erro ao carregar municípios</option>';
                 });
+
+            pesquisa_popular_anos_comex();
+        }
+
+        // Preenche os seletores de ano (início/fim) do Comércio Exterior -
+        // o Comex Stat tem dado mensal a partir de 1997. Usamos select em
+        // vez de texto livre para não deixar o usuário digitar um ano
+        // inválido ou fora do intervalo coberto pela API.
+        function pesquisa_popular_anos_comex() {
+            const anoAtual = new Date().getFullYear();
+            const anoMaisAntigo = 1997;
+            const selectInicio = document.getElementById('pesquisa_ano_inicio');
+            const selectFim = document.getElementById('pesquisa_ano_fim');
+            selectInicio.innerHTML = '';
+            selectFim.innerHTML = '';
+            for (let ano = anoAtual; ano >= anoMaisAntigo; ano--) {
+                const optInicio = document.createElement('option');
+                optInicio.value = ano;
+                optInicio.textContent = ano;
+                selectInicio.appendChild(optInicio);
+
+                const optFim = document.createElement('option');
+                optFim.value = ano;
+                optFim.textContent = ano;
+                selectFim.appendChild(optFim);
+            }
+            // Padrão: ano atual nos dois campos (consulta mais recente)
+            selectInicio.value = String(anoAtual);
+            selectFim.value = String(anoAtual);
         }
 
         // Preenche os selects de Região e, inicialmente, a lista completa de
@@ -1144,36 +1206,127 @@
 
         function pesquisa_exibir_resultado(data) {
             const resultadoDiv = document.getElementById('pesquisa_resultado');
-            let html = '';
-
+            let htmlErros = '';
             if (data.erros && data.erros.length) {
                 data.erros.forEach(e => {
-                    html += `<div class="alert alert-error" style="margin-top: 10px;">⚠️ ${e.objeto}: ${e.erro}</div>`;
+                    htmlErros += `<div class="alert alert-error" style="margin-top: 10px;">⚠️ ${e.objeto}: ${e.erro}</div>`;
                 });
             }
+            resultadoDiv.innerHTML = htmlErros;
 
-            data.resultados.forEach(r => {
-                html += `<h3 style="margin-top: 20px;">${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>`;
-                if (!r.serie.length) {
-                    html += '<p style="color: var(--cinza-texto);">Nenhum dado retornado.</p>';
-                    return;
-                }
-                html += '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
-                r.serie.slice(0, 50).forEach(item => {
-                    const valor = (item.valor === null || item.valor === undefined) ? '-' : item.valor.toLocaleString('pt-BR');
-                    html += `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
-                });
-                html += '</tbody></table>';
-                if (r.serie.length > 50) {
-                    html += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 50 de ${r.serie.length} registros.</p>`;
-                }
-            });
+            // Cada objeto vira seu próprio bloco: gráfico primeiro (já aberto),
+            // dados brutos depois, recolhidos dentro de um <details> que o
+            // usuário expande tocando - evita que uma tabela longa empurre o
+            // gráfico (e os próximos objetos) para fora da primeira tela.
+            data.resultados.forEach((r, indice) => pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv));
 
             if (data.analises) {
-                html += pesquisa_renderizar_analises(data.analises);
+                const blocoAnalises = document.createElement('div');
+                blocoAnalises.innerHTML = pesquisa_renderizar_analises(data.analises);
+                resultadoDiv.appendChild(blocoAnalises);
+            }
+        }
+
+        function pesquisa_renderizar_bloco_objeto(r, indice, resultadoDiv) {
+            const bloco = document.createElement('div');
+            bloco.style.marginTop = '28px';
+
+            if (!r.serie.length) {
+                bloco.innerHTML = `
+                    <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
+                    <p style="color: var(--cinza-texto);">Nenhum dado retornado.</p>`;
+                resultadoDiv.appendChild(bloco);
+                return;
             }
 
-            resultadoDiv.innerHTML = html;
+            const canvasId = `pesquisa_chart_${indice}`;
+
+            // Decide o tipo de gráfico pelos dados: uma única localidade com
+            // vários períodos é uma série temporal (linha); várias
+            // localidades (ex: municípios de uma região, ou países no comex)
+            // é um corte transversal (barras, maior valor primeiro).
+            const localidadesUnicas = [...new Set(r.serie.map(s => s.localidade))];
+            const ehSerieTemporal = localidadesUnicas.length === 1;
+
+            let avisoTruncamento = '';
+            let chartConfig;
+
+            if (ehSerieTemporal) {
+                const pontos = [...r.serie].sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
+                chartConfig = {
+                    type: 'line',
+                    data: {
+                        labels: pontos.map(p => p.periodo),
+                        datasets: [{
+                            label: r.nome,
+                            data: pontos.map(p => p.valor),
+                            borderColor: 'rgba(200, 16, 46, 1)',
+                            backgroundColor: 'rgba(200, 16, 46, 0.12)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.15,
+                            pointRadius: pontos.length > 40 ? 0 : 3
+                        }]
+                    },
+                    options: {scales: {y: {beginAtZero: false}}}
+                };
+            } else {
+                // Uma localidade pode ter mais de um período (ex: região
+                // intermediária com série histórica) - usamos o período mais
+                // recente de cada uma para o corte transversal do gráfico.
+                const maisRecentePorLocalidade = new Map();
+                r.serie.forEach(item => {
+                    const atual = maisRecentePorLocalidade.get(item.localidade);
+                    if (!atual || String(item.periodo) > String(atual.periodo)) {
+                        maisRecentePorLocalidade.set(item.localidade, item);
+                    }
+                });
+                const LIMITE_GRAFICO = 30;
+                const pontosOrdenados = [...maisRecentePorLocalidade.values()].sort((a, b) => (b.valor || 0) - (a.valor || 0));
+                const pontosGrafico = pontosOrdenados.slice(0, LIMITE_GRAFICO);
+
+                chartConfig = {
+                    type: 'bar',
+                    data: {
+                        labels: pontosGrafico.map(p => p.localidade),
+                        datasets: [{
+                            label: r.nome,
+                            data: pontosGrafico.map(p => p.valor),
+                            backgroundColor: 'rgba(200, 16, 46, 0.78)'
+                        }]
+                    },
+                    options: {scales: {y: {beginAtZero: true}}}
+                };
+
+                if (pontosOrdenados.length > LIMITE_GRAFICO) {
+                    avisoTruncamento = `<p style="font-size: 13px; color: var(--cinza-texto); margin-top: -10px;">
+                        Mostrando as ${LIMITE_GRAFICO} maiores localidades (de ${pontosOrdenados.length}). Veja todas nos dados abaixo.
+                    </p>`;
+                }
+            }
+
+            let tabelaHtml = '<table class="data-table"><thead><tr><th>Localidade</th><th>Período</th><th>Valor</th></tr></thead><tbody>';
+            r.serie.slice(0, 500).forEach(item => {
+                const valor = (item.valor === null || item.valor === undefined) ? '-' : item.valor.toLocaleString('pt-BR');
+                tabelaHtml += `<tr><td>${item.localidade}</td><td>${item.periodo}</td><td>${valor}</td></tr>`;
+            });
+            tabelaHtml += '</tbody></table>';
+            if (r.serie.length > 500) {
+                tabelaHtml += `<p style="font-size: 13px; color: var(--cinza-texto);">Mostrando 500 de ${r.serie.length} registros.</p>`;
+            }
+
+            bloco.innerHTML = `
+                <h3>${r.nome} <span style="font-size: 13px; color: var(--cinza-texto);">(${r.unidade})</span></h3>
+                <div class="chart-container"><canvas id="${canvasId}"></canvas></div>
+                ${avisoTruncamento}
+                <div id="${canvasId}_download"></div>
+                <details class="pesquisa-dados-detalhe" style="margin-top: 14px;">
+                    <summary>Ver dados (${r.serie.length} registro${r.serie.length === 1 ? '' : 's'})</summary>
+                    <div class="pesquisa-dados-tabela">${tabelaHtml}</div>
+                </details>`;
+            resultadoDiv.appendChild(bloco);
+
+            criar_grafico(canvasId, chartConfig, `${canvasId}_download`);
         }
 
         function pesquisa_renderizar_analises(analises) {

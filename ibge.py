@@ -166,10 +166,26 @@ _VAR_SALARIOS = 662
 # Índice de Gini de renda não está disponível no SIDRA em nível de município
 # (confirmado: só existe até UF/Região). Marcado como indisponível no perfil.
 
-# Níveis territoriais aceitos pela API (prefixo "n" + número)
+# Níveis territoriais aceitos pela API (prefixo "n" + número).
+#
+# IMPORTANTE sobre 'regiao': o código n24 é "Região Geográfica Intermediária"
+# (ex: "Região Geográfica Intermediária de Florianópolis", "de Chapecó", "de
+# Lages"), a divisão regional atual do IBGE pós-2017 - NÃO é n2 (que seriam
+# as 5 grandes regiões do país, Norte/Nordeste/Sul/Sudeste/Centro-Oeste).
+# Confirmado com chamada real à API (tabela do Censo 2022, retornou 165
+# registros, um por região intermediária do Brasil).
+#
+# Nem toda tabela do SIDRA publica dado neste nível - tabelas de estimativas
+# anuais (como população estimada, tabela 6579) e o PIB municipal (tabela
+# 5938) retornam erro 400 em n24 (confirmado testando diretamente), porque
+# essas pesquisas só descem até UF/Município, não têm agregação oficial por
+# região intermediária. Isso é uma limitação de cada tabela, não um erro de
+# código - a camada de objetos (objetos.py) trata isso como "sem dados
+# disponíveis nesta escala" para o indicador em questão, sem quebrar a
+# consulta dos demais indicadores selecionados.
 NIVEIS = {
     'brasil': 'n1/1',
-    'regiao': 'n2/all',
+    'regiao': 'n24/all',  # Região Geográfica Intermediária (ver nota acima)
     'uf': 'n3',          # precisa de código da UF (ex: 42 = SC)
     'municipio': 'n6',    # precisa de código do município (ex: 4205407 = Florianópolis)
 }
@@ -219,6 +235,14 @@ def buscar_dados(indicador_key, nivel, codigo_localidade=None, periodo='last'):
     url = montar_url(indicador_key, nivel, codigo_localidade, periodo)
 
     resp = request_com_retry('get', url, timeout=20)
+    if resp.status_code == 400:
+        # SIDRA retorna 400 quando a combinação tabela+nível territorial não
+        # existe (ex: uma tabela de estimativa anual que não publica dado por
+        # região intermediária) - mensagem mais clara que o HTTPError cru.
+        raise ValueError(
+            f'O indicador "{INDICADORES.get(indicador_key, {}).get("nome", indicador_key)}" '
+            f'não está disponível nesta escala territorial nesta fonte (SIDRA).'
+        )
     resp.raise_for_status()
     dados_brutos = resp.json()
 

@@ -16,11 +16,15 @@ import ibge
 import bcb
 import comexstat
 
+# Janela padrão (em registros mensais) buscada do BCB/SGS para a tela de
+# Pesquisa - 10 anos de histórico, para dar uma série de verdade ao gráfico.
+BCB_QUANTIDADE_PADRAO = 120
+
 # Escalas territoriais suportadas pela pesquisa unificada. Nem todo objeto
 # está disponível em toda escala (ver ESCALAS_POR_FONTE abaixo).
 ESCALAS = {
     'brasil': 'Brasil',
-    'regiao': 'Região',
+    'regiao': 'Região Geográfica Intermediária',
     'uf': 'Unidade Federativa',
     'municipio': 'Município',
 }
@@ -206,9 +210,12 @@ def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='l
         ]
 
     elif fonte == 'bcb':
-        # BCB é sempre série nacional - localidade fixa "Brasil".
-        quantidade = 24
-        dados = bcb.buscar_serie(info['chave_fonte'], quantidade=quantidade)
+        # BCB é sempre série nacional - localidade fixa "Brasil". Pede uma
+        # janela ampla (10 anos de dados mensais) em vez de só os últimos 24
+        # registros, para mostrar o histórico disponível no gráfico por
+        # padrão (BCB/SGS não tem um equivalente direto a "todos os
+        # períodos" como o SIDRA tem com p/all).
+        dados = bcb.buscar_serie(info['chave_fonte'], quantidade=BCB_QUANTIDADE_PADRAO)
         serie = [
             {'localidade': 'Brasil', 'periodo': d['periodo'], 'valor': d['valor']}
             for d in dados
