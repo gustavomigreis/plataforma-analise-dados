@@ -109,10 +109,20 @@ INDICADORES = {
     },
     # Pecuária (PPM - Pesquisa da Pecuária Municipal)
     'ppm_efetivo_rebanho': {
-        'nome': 'Efetivo dos Rebanhos (Pecuária Municipal)',
+        'nome': 'Efetivo de Bovinos (Pecuária Municipal)',
         'tabela': 3939,
         'variavel': 105,
         'unidade': 'cabeças',
+        # A tabela 3939 tem uma classificação obrigatória "Tipo de rebanho"
+        # (c79) sem a qual a API devolve só ".." (sem dado) - confirmado
+        # contra a API real, que exige escolher uma categoria (Bovino,
+        # Suíno, Equino etc; não existe um "total geral" somando todas as
+        # espécies, cada uma é contada em unidades diferentes). Usamos
+        # Bovino (c79/2670) como padrão - é a espécie de maior relevância
+        # econômica para SC e a mais comumente citada como "efetivo do
+        # rebanho" sem qualificação. O nome do indicador deixa isso
+        # explícito para não sugerir que é a soma de todos os rebanhos.
+        'classificacao': 'c79/2670',
     },
 }
 
@@ -236,8 +246,16 @@ def montar_url(indicador_key, nivel, codigo_localidade=None, periodo='last'):
         localidade = NIVEIS['regiao']
     elif nivel in ('uf', 'municipio'):
         if not codigo_localidade:
-            raise ValueError(f'nível "{nivel}" exige codigo_localidade')
-        if isinstance(codigo_localidade, dict) and codigo_localidade.get('dentro_de'):
+            # Nenhum código/filtro informado: "(Todos)" - traz todas as
+            # localidades do nível de uma vez (ex: todos os ~5.570 municípios
+            # do Brasil, ou todas as 27 UFs). Confirmado contra a API real
+            # (n6/all devolveu milhares de registros de municípios de vários
+            # estados numa única resposta). Antes isso levantava erro exigindo
+            # um código específico - mas "nenhum filtro escolhido" é
+            # justamente o caso de uso de "(Todos)" na tela de Pesquisa, não
+            # um estado inválido.
+            localidade = f'{NIVEIS[nivel]}/all'
+        elif isinstance(codigo_localidade, dict) and codigo_localidade.get('dentro_de'):
             # "Todos os municípios de uma UF" (ou de uma UF dentro de uma
             # região) sem listar código por código - usa o filtro "in" do
             # SIDRA (sintaxe: n6/in n3 42 = todos os municípios dentro da UF
@@ -257,6 +275,12 @@ def montar_url(indicador_key, nivel, codigo_localidade=None, periodo='last'):
         raise ValueError(f'Nível territorial desconhecido: {nivel}')
 
     url = f'{SIDRA_BASE}/t/{tabela}/{localidade}/v/{variavel}/p/{periodo}'
+    # Alguns indicadores (ex: PPM - Pesquisa da Pecuária Municipal) têm uma
+    # classificação obrigatória (ex: "Tipo de rebanho") sem a qual o SIDRA
+    # devolve só ".." em vez do valor - ver nota em INDICADORES['ppm_efetivo_rebanho'].
+    classificacao = indicador.get('classificacao')
+    if classificacao:
+        url += f'/{classificacao}'
     return url
 
 
