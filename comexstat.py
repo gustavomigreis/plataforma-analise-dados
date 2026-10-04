@@ -96,7 +96,15 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
 
     payload = {
         'flow': FLUXOS[fluxo],
-        'monthDetail': False,
+        # 'monthDetail': True pede o detalhamento mensal da API (confirmado
+        # contra o código-fonte de dois clientes independentes da mesma API -
+        # pacotes R e Python "comexr"/"comexpy" - que leem os campos 'year' e
+        # 'monthNumber' de cada registro quando monthDetail é usado). Sem
+        # isso, a API devolve um único registro agregado para todo o
+        # intervalo pedido, e o período de cada ponto não pode ser
+        # recuperado - era o bug anterior (todo ponto do gráfico mostrava o
+        # intervalo inteiro "ano_inicio-ano_fim" em vez do ano/mês real).
+        'monthDetail': True,
         'period': {'from': f'{ano_inicio}-01', 'to': f'{ano_fim}-12'},
         'filters': filtros,
         'details': [campo_detalhe],
@@ -120,28 +128,60 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
     lista = dados_brutos.get('data', {}).get('list', [])
 
     # Campos de agrupamento conhecidos por detalhamento (quando não é por
-    # município). Mapeamento best-effort, baseado no padrão noXxx/noXxxEng
-    # observado na API - não totalmente validado contra chamada real para
-    # todo detalhamento, dado que exigiria N testes against a API externa;
-    # se o campo não existir na resposta, cai no fallback 'rotulo' genérico.
-    _CAMPO_ROTULO_POR_DETALHE = {
-        'pais': 'noCountry',
-        'uf': 'noState',
-        'ncm': 'noNcmPortuguese',
-        'bloco_economico': 'noBlock',
-        'via_transporte': 'noViaTransport',
-        'secao': 'noSection',
-        'urf': 'noUrf',
+    # município). A API costuma devolver, para cada detalhe, tanto um campo
+    # com o NOME do grupo (ex: o nome do país) quanto o nome do próprio
+    # detalhe pedido (ex: 'state') - como não há confirmação direta contra a
+    # API real disponível neste ambiente (rede bloqueada), tenta os
+    # candidatos mais prováveis em ordem e cai no fallback genérico só se
+    # nenhum vier preenchido, para não mascarar silenciosamente uma falha
+    # de leitura (ver _extrair_rotulo abaixo).
+    _CAMPOS_ROTULO_POR_DETALHE = {
+        'pais': ('noCountry', 'country'),
+        'uf': ('noState', 'state'),
+        'ncm': ('noNcmPortuguese', 'ncm'),
+        'bloco_economico': ('noBlock', 'economicBlock'),
+        'via_transporte': ('noViaTransport', 'via'),
+        'secao': ('noSection', 'section'),
+        'urf': ('noUrf', 'urf'),
     }
 
+    def _extrair_rotulo(item, detalhamento):
+        for campo in _CAMPOS_ROTULO_POR_DETALHE.get(detalhamento, ()):
+            valor = item.get(campo)
+            if valor not in (None, ''):
+                return str(valor)
+        return None
+
+    # Período de cada registro: com 'monthDetail': True, cada item vem com o
+    # ano (e o mês) próprios, em vez de um único agregado para o intervalo
+    # inteiro. Candidatos de nome de campo confirmados contra o código-fonte
+    # (não testes) de dois clientes independentes da mesma API ('year' e
+    # 'monthNumber' - pacotes R/Python "comexr"/"comexpy"); 'coAno'/'coMes'
+    # entram como fallback por seguirem o padrão de nomenclatura comum ao
+    # restante da API (confirmado noutros endpoints do Comex Stat).
+    _CAMPOS_ANO = ('year', 'coAno', 'noAno')
+    _CAMPOS_MES = ('monthNumber', 'coMes', 'mes')
+
+    def _extrair_periodo(item):
+        ano = next((item[c] for c in _CAMPOS_ANO if item.get(c) not in (None, '')), None)
+        mes = next((item[c] for c in _CAMPOS_MES if item.get(c) not in (None, '')), None)
+        if ano is None:
+            return None
+        if mes is not None:
+            return f'{int(ano):04d}-{int(mes):02d}'
+        return str(int(ano))
+
     resultado = []
+    campos_rotulo_ausentes = False
+    campos_periodo_ausentes = False
     for item in lista:
         if detalhamento == 'municipio':
             nome_mun_uf = item.get('noMunMinsgUf')
             if nome_mun_uf:
                 rotulo, _, sigla_uf = nome_mun_uf.rpartition(' - ')
             else:
-                rotulo, sigla_uf = 'Desconhecido', None
+                rotulo, sigla_uf = None, None
+                campos_rotulo_ausentes = True
 
             # Checagem defensiva: garante que o registro é mesmo de SC, já que
             # um código de UF incorreto no filtro causaria silenciosamente
@@ -151,16 +191,20 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
             if sigla_uf and uf == UF_SC and sigla_uf != 'SC':
                 continue
         else:
-            campo_rotulo = _CAMPO_ROTULO_POR_DETALHE.get(detalhamento)
-            rotulo = item.get(campo_rotulo) if campo_rotulo else None
+            rotulo = _extrair_rotulo(item, detalhamento)
             if rotulo is None:
-                rotulo = 'Desconhecido'
+                campos_rotulo_ausentes = True
+
+        periodo_item = _extrair_periodo(item)
+        if periodo_item is None:
+            campos_periodo_ausentes = True
+            periodo_item = f'{ano_inicio}-{ano_fim}'
 
         registro = {
-            'rotulo': rotulo,
+            'rotulo': rotulo if rotulo is not None else 'Desconhecido',
             'detalhamento': detalhamento,
             'fluxo': fluxo,
-            'periodo': f'{ano_inicio}-{ano_fim}',
+            'periodo': periodo_item,
         }
         for chave_metrica in metricas:
             campo_api = METRICAS_DISPONIVEIS[chave_metrica]
@@ -170,11 +214,24 @@ def buscar_comercio_exterior(fluxo, ano_inicio, ano_fim, codigo_municipio=None, 
         # quando o detalhamento é o padrão (município), para não quebrar o
         # restante do código (frontend, dataset export) que já depende delas.
         if detalhamento == 'municipio':
-            registro['municipio'] = rotulo
+            registro['municipio'] = registro['rotulo']
             registro['valor_fob_usd'] = registro.get('fob')
             registro['peso_liquido_kg'] = registro.get('kg')
 
         resultado.append(registro)
+
+    # Sinaliza no log do servidor (não trava a consulta) quando o
+    # mapeamento de campo falhou para TODOS os registros - sintoma de a API
+    # ter mudado o nome do campo e precisar de um novo candidato na lista
+    # acima, em vez de mascarar silenciosamente com "Desconhecido"/período
+    # errado como acontecia antes.
+    if lista and campos_rotulo_ausentes:
+        print(f'[comexstat] AVISO: não encontrei o campo de rótulo esperado para '
+              f'detalhamento={detalhamento!r} na resposta da API - exemplo de registro: '
+              f'{lista[0]!r}')
+    if lista and campos_periodo_ausentes:
+        print(f'[comexstat] AVISO: não encontrei campo de ano/mês esperado na resposta '
+              f'da API (monthDetail=True) - exemplo de registro: {lista[0]!r}')
 
     # Ordena pela primeira métrica pedida, decrescente — não garantido pela
     # API em si, mas é a ordem mais útil para quem consulta (maiores valores
