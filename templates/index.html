@@ -274,6 +274,35 @@
             margin-bottom: 20px;
         }
 
+        /* Caixas de tema - agrupam os objetos (indicadores) da tela de
+           Pesquisa por assunto, não por fonte de dado. */
+        .pesquisa-temas-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .pesquisa-tema-caixa {
+            border: 1px solid var(--cinza-linha);
+            padding: 12px 14px;
+        }
+
+        .pesquisa-tema-titulo {
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            border-bottom: 2px solid var(--preto);
+        }
+
+        @media (max-width: 640px) {
+            .pesquisa-temas-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .form-group label {
             display: block;
             margin-bottom: 8px;
@@ -540,8 +569,26 @@
             </div>
 
             <div class="form-group" id="pesquisa_localidade_group">
-                <label for="pesquisa_municipio">Município</label>
-                <select id="pesquisa_municipio"></select>
+                <label>Localização</label>
+                <p style="color: var(--cinza-texto); font-size: 12.5px; margin: -4px 0 10px;">
+                    Filtre por região, estado e região imediata para encontrar o município mais rápido.
+                </p>
+                <div class="grid-2" style="gap: 10px; margin-bottom: 10px;">
+                    <select id="pesquisa_filtro_regiao" onchange="pesquisa_filtrar_localidade()">
+                        <option value="">Região (todas)</option>
+                    </select>
+                    <select id="pesquisa_filtro_uf" onchange="pesquisa_filtrar_localidade()">
+                        <option value="">Estado (todos)</option>
+                    </select>
+                </div>
+                <div class="grid-2" style="gap: 10px;">
+                    <select id="pesquisa_filtro_regiao_imediata" onchange="pesquisa_filtrar_localidade()">
+                        <option value="">Região imediata (todas)</option>
+                    </select>
+                    <select id="pesquisa_municipio">
+                        <option value="">Carregando municípios...</option>
+                    </select>
+                </div>
             </div>
 
             <div class="form-group" id="pesquisa_periodo_comex_group" style="display: none;">
@@ -554,7 +601,7 @@
 
             <div class="form-group">
                 <label>Objetos (selecione um ou mais)</label>
-                <div id="pesquisa_objetos_lista" style="border: 1px solid var(--cinza-linha); max-height: 320px; overflow-y: auto; padding: 4px;">
+                <div id="pesquisa_objetos_lista" style="max-height: 520px; overflow-y: auto; padding: 2px;">
                     <p style="padding: 12px; color: var(--cinza-texto);">Carregando catálogo de objetos...</p>
                 </div>
             </div>
@@ -918,6 +965,8 @@
         // ===== ABA: PESQUISA (escala + múltiplos objetos) =====
         let pesquisa_catalogo_cache = [];
 
+        let pesquisa_municipios_brasil_cache = [];
+
         function pesquisa_inicializar() {
             axios.get('/api/objetos')
                 .then(response => {
@@ -929,25 +978,86 @@
                         '<p style="padding: 12px; color: var(--vermelho);">Erro ao carregar o catálogo de objetos.</p>';
                 });
 
-            // Reaproveita o cache de municípios de SC já carregado pela aba do IBGE
-            // (ibge_inicializar roda antes desta função na inicialização da página).
-            if (ibge_municipios_cache && ibge_municipios_cache.length) {
-                pesquisa_preencher_municipios();
-            } else {
-                setTimeout(pesquisa_preencher_municipios, 1000);
-            }
+            axios.get('/api/ibge/municipios/brasil')
+                .then(response => {
+                    pesquisa_municipios_brasil_cache = response.data.municipios;
+                    pesquisa_popular_filtros_localidade();
+                })
+                .catch(() => {
+                    const select = document.getElementById('pesquisa_municipio');
+                    if (select) select.innerHTML = '<option value="">Erro ao carregar municípios</option>';
+                });
         }
 
-        function pesquisa_preencher_municipios() {
-            const select = document.getElementById('pesquisa_municipio');
-            if (!select || !ibge_municipios_cache || !ibge_municipios_cache.length) return;
-            const municipios_ordenados = [...ibge_municipios_cache].sort((a, b) => a.nome.localeCompare(b.nome));
-            select.innerHTML = '';
-            municipios_ordenados.forEach(m => {
-                const option = document.createElement('option');
-                option.value = m.codigo;
-                option.textContent = m.nome;
-                select.appendChild(option);
+        // Preenche os selects de Região e, inicialmente, a lista completa de
+        // municípios - os selects de Estado/Região imediata/Município vão se
+        // estreitando conforme o usuário filtra (pesquisa_filtrar_localidade).
+        function pesquisa_popular_filtros_localidade() {
+            const selectRegiao = document.getElementById('pesquisa_filtro_regiao');
+            const regioes = [...new Set(pesquisa_municipios_brasil_cache.map(m => m.regiao_nome).filter(Boolean))].sort();
+            regioes.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r;
+                opt.textContent = r;
+                selectRegiao.appendChild(opt);
+            });
+            pesquisa_filtrar_localidade();
+        }
+
+        // Reconstrói os selects de Estado, Região Imediata e Município a
+        // partir dos filtros atualmente escolhidos (cascata: cada nível
+        // restringe o próximo, e muda a Região/Estado reseta os de baixo).
+        function pesquisa_filtrar_localidade() {
+            const regiao = document.getElementById('pesquisa_filtro_regiao').value;
+            const selectUf = document.getElementById('pesquisa_filtro_uf');
+            const ufAtual = selectUf.value;
+
+            let candidatos = pesquisa_municipios_brasil_cache;
+            if (regiao) candidatos = candidatos.filter(m => m.regiao_nome === regiao);
+
+            const ufs = [...new Map(candidatos.map(m => [m.uf_sigla, m.uf_nome])).entries()]
+                .sort((a, b) => a[1].localeCompare(b[1]));
+            selectUf.innerHTML = '<option value="">Estado (todos)</option>';
+            ufs.forEach(([sigla, nome]) => {
+                const opt = document.createElement('option');
+                opt.value = sigla;
+                opt.textContent = nome;
+                if (sigla === ufAtual) opt.selected = true;
+                selectUf.appendChild(opt);
+            });
+
+            const ufEscolhida = selectUf.value;
+            if (ufEscolhida) candidatos = candidatos.filter(m => m.uf_sigla === ufEscolhida);
+
+            const selectRegiaoImediata = document.getElementById('pesquisa_filtro_regiao_imediata');
+            const regiaoImediataAtual = selectRegiaoImediata.value;
+            const regioesImediatas = [...new Set(candidatos.map(m => m.regiao_imediata_nome).filter(Boolean))].sort();
+            selectRegiaoImediata.innerHTML = '<option value="">Região imediata (todas)</option>';
+            regioesImediatas.forEach(ri => {
+                const opt = document.createElement('option');
+                opt.value = ri;
+                opt.textContent = ri;
+                if (ri === regiaoImediataAtual) opt.selected = true;
+                selectRegiaoImediata.appendChild(opt);
+            });
+
+            const regiaoImediataEscolhida = selectRegiaoImediata.value;
+            if (regiaoImediataEscolhida) candidatos = candidatos.filter(m => m.regiao_imediata_nome === regiaoImediataEscolhida);
+
+            const selectMunicipio = document.getElementById('pesquisa_municipio');
+            const municipioAtual = selectMunicipio.value;
+            const municipiosOrdenados = [...candidatos].sort((a, b) => a.nome.localeCompare(b.nome));
+            selectMunicipio.innerHTML = '';
+            if (!municipiosOrdenados.length) {
+                selectMunicipio.innerHTML = '<option value="">Nenhum município para este filtro</option>';
+                return;
+            }
+            municipiosOrdenados.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.codigo;
+                opt.textContent = `${m.nome} (${m.uf_sigla})`;
+                if (String(m.codigo) === municipioAtual) opt.selected = true;
+                selectMunicipio.appendChild(opt);
             });
         }
 
@@ -968,20 +1078,30 @@
                 return;
             }
 
-            const nomes_fonte = {ibge: 'IBGE/SIDRA', bcb: 'Banco Central', comex: 'Comércio Exterior'};
-            let html = '';
-            let fonte_atual = null;
+            // Agrupa por tema de conteúdo (não por fonte) e exibe como caixas,
+            // para o usuário encontrar variáveis por assunto mesmo quando vêm
+            // de fontes diferentes (ex: câmbio do BCB ao lado de comércio
+            // exterior do Comex Stat, ambos em "Comércio Exterior e Câmbio").
+            const temas = new Map();
             disponiveis.forEach(obj => {
-                if (obj.fonte !== fonte_atual) {
-                    fonte_atual = obj.fonte;
-                    html += `<div style="padding: 8px 10px 4px; font-size: 12px; color: var(--cinza-texto); font-weight: 600;">${nomes_fonte[fonte_atual] || fonte_atual}</div>`;
-                }
-                html += `
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer;">
-                        <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
-                        <span>${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
-                    </label>`;
+                if (!temas.has(obj.tema_nome)) temas.set(obj.tema_nome, []);
+                temas.get(obj.tema_nome).push(obj);
             });
+
+            let html = '<div class="pesquisa-temas-grid">';
+            for (const [temaNome, objs] of temas) {
+                html += `<div class="pesquisa-tema-caixa">
+                    <div class="pesquisa-tema-titulo">${temaNome}</div>`;
+                objs.forEach(obj => {
+                    html += `
+                        <label style="display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer;">
+                            <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
+                            <span style="font-size: 13.5px;">${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
+                        </label>`;
+                });
+                html += '</div>';
+            }
+            html += '</div>';
             container.innerHTML = html;
 
             // Comércio Exterior exige período - mostra os campos de ano só se algum objeto comex estiver visível

@@ -39,6 +39,57 @@ ESCALAS_POR_FONTE = {
     'comex': {'uf', 'municipio'},
 }
 
+# Temas de conteúdo, usados para agrupar o catálogo de objetos na tela de
+# Pesquisa em "caixas" de assunto, em vez de por fonte - um objeto de
+# qualquer fonte pode cair no mesmo tema (ex: câmbio do BCB e comércio
+# exterior do Comex Stat, ambos sob "Comércio Exterior e Câmbio").
+TEMAS = {
+    'demografia': 'Demografia',
+    'economia_producao': 'Economia e Produção',
+    'trabalho_renda': 'Trabalho, Renda e Empresas',
+    'agropecuaria': 'Agropecuária',
+    'habitacao': 'Habitação',
+    'precos_inflacao': 'Preços e Inflação',
+    'juros_moeda': 'Juros e Moeda',
+    'financas_publicas': 'Finanças Públicas',
+    'comercio_exterior': 'Comércio Exterior e Câmbio',
+}
+
+# Mapeia cada objeto (pela chave na fonte, antes do prefixo "fonte:") para
+# seu tema. Um objeto sem entrada aqui cai em "outros" (ver _construir_catalogo).
+_TEMA_POR_CHAVE_IBGE = {
+    'populacao': 'demografia',
+    'populacao_censo2022': 'demografia',
+    'indice_envelhecimento': 'demografia',
+    'idade_mediana': 'demografia',
+    'razao_sexo': 'demografia',
+    'pib_municipal': 'economia_producao',
+    'vab_agropecuaria': 'agropecuaria',
+    'vab_industria': 'economia_producao',
+    'vab_servicos': 'economia_producao',
+    'empresas_atuantes': 'trabalho_renda',
+    'pessoal_ocupado': 'trabalho_renda',
+    'domicilios_total': 'habitacao',
+    'pam_area_plantada': 'agropecuaria',
+    'pam_valor_producao': 'agropecuaria',
+    'pam_quantidade_produzida': 'agropecuaria',
+    'ppm_efetivo_rebanho': 'agropecuaria',
+}
+
+_TEMA_POR_CHAVE_BCB = {
+    'selic_meta': 'juros_moeda',
+    'selic_over': 'juros_moeda',
+    'cdi': 'juros_moeda',
+    'tjlp': 'juros_moeda',
+    'cambio_usd': 'comercio_exterior',
+    'ipca_mensal': 'precos_inflacao',
+    'ipca_12_meses': 'precos_inflacao',
+    'igp_m': 'precos_inflacao',
+    'inpc_mensal': 'precos_inflacao',
+    'divida_pib': 'financas_publicas',
+    'ibc_br': 'economia_producao',
+}
+
 
 def _construir_catalogo():
     """
@@ -55,6 +106,7 @@ def _construir_catalogo():
             'nome': info['nome'],
             'unidade': info['unidade'],
             'escalas': sorted(ESCALAS_POR_FONTE['ibge']),
+            'tema': _TEMA_POR_CHAVE_IBGE.get(chave, 'outros'),
         }
 
     for chave, info in bcb.INDICADORES.items():
@@ -64,11 +116,13 @@ def _construir_catalogo():
             'nome': info['nome'],
             'unidade': info['unidade'],
             'escalas': sorted(ESCALAS_POR_FONTE['bcb']),
+            'tema': _TEMA_POR_CHAVE_BCB.get(chave, 'outros'),
         }
 
     # Comex Stat não é um catálogo de variáveis fixas como os outros - é uma
     # combinação de fluxo (export/import) x métrica. Expomos as combinações
     # mais úteis como "objetos" para manter a mesma interface de seleção.
+    # Todas caem no tema "Comércio Exterior e Câmbio", junto com câmbio do BCB.
     for fluxo_chave, fluxo_nome in (('exportacao', 'Exportações'), ('importacao', 'Importações')):
         for metrica_chave in ('fob', 'kg'):
             chave = f'comex:{fluxo_chave}_{metrica_chave}'
@@ -79,6 +133,7 @@ def _construir_catalogo():
                 'nome': f'{fluxo_nome} - {nome_metrica}',
                 'unidade': 'US$' if metrica_chave == 'fob' else 'kg',
                 'escalas': sorted(ESCALAS_POR_FONTE['comex']),
+                'tema': 'comercio_exterior',
             }
 
     return catalogo
@@ -90,7 +145,8 @@ CATALOGO = _construir_catalogo()
 def listar_objetos(escala=None):
     """
     Lista os objetos do catálogo, opcionalmente filtrados por escala
-    territorial (só retorna objetos disponíveis naquela escala).
+    territorial (só retorna objetos disponíveis naquela escala). Ordenado
+    por tema (as "caixas" exibidas na tela de Pesquisa), depois por nome.
     """
     itens = []
     for chave, info in CATALOGO.items():
@@ -102,8 +158,10 @@ def listar_objetos(escala=None):
             'nome': info['nome'],
             'unidade': info['unidade'],
             'escalas': info['escalas'],
+            'tema': info['tema'],
+            'tema_nome': TEMAS.get(info['tema'], 'Outros'),
         })
-    return sorted(itens, key=lambda x: (x['fonte'], x['nome']))
+    return sorted(itens, key=lambda x: (x['tema_nome'], x['nome']))
 
 
 def _nivel_ibge(escala):

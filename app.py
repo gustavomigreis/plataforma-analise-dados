@@ -305,9 +305,29 @@ def ibge_indicadores():
 
 @app.route('/api/ibge/municipios', methods=['GET'])
 def ibge_municipios():
-    """Lista os municípios de Santa Catarina com seus códigos IBGE."""
+    """
+    Lista os municípios de Santa Catarina com seus códigos IBGE. Usada pelas
+    ferramentas avançadas que são especificamente sobre SC (Perfil do
+    Município, Comércio Exterior) - não confundir com /api/ibge/municipios/brasil,
+    usada pela tela de Pesquisa (que cobre o Brasil inteiro).
+    """
     try:
         municipios = ibge.buscar_municipios_sc()
+        return jsonify({'municipios': municipios})
+    except Exception as e:
+        return jsonify({'erro': f'Falha ao consultar IBGE: {str(e)}'}), 502
+
+
+@app.route('/api/ibge/municipios/brasil', methods=['GET'])
+def ibge_municipios_brasil():
+    """
+    Lista todos os municípios do Brasil com a hierarquia territorial completa
+    (região, UF, região imediata) - usada pelo seletor hierárquico da tela
+    de Pesquisa. Resultado é relativamente pesado (~5.570 municípios); o
+    frontend busca isso uma vez e mantém em cache de sessão do navegador.
+    """
+    try:
+        municipios = ibge.buscar_municipios_brasil()
         return jsonify({'municipios': municipios})
     except Exception as e:
         return jsonify({'erro': f'Falha ao consultar IBGE: {str(e)}'}), 502

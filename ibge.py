@@ -356,6 +356,9 @@ def buscar_municipios_sc():
     """
     Retorna a lista de municípios de Santa Catarina (código IBGE + nome),
     usando a API de Localidades do IBGE (separada do SIDRA, mas também pública).
+
+    Mantida por compatibilidade - buscar_municipios_brasil() é a função usada
+    hoje pela tela de Pesquisa (cobre o Brasil inteiro, com a mesma fonte).
     """
     url = 'https://servicodados.ibge.gov.br/api/v1/localidades/estados/42/municipios'
     resp = request_com_retry('get', url, timeout=20)
@@ -363,3 +366,46 @@ def buscar_municipios_sc():
     dados = resp.json()
 
     return [{'codigo': m['id'], 'nome': m['nome']} for m in dados]
+
+
+def buscar_municipios_brasil():
+    """
+    Retorna todos os municípios do Brasil (cerca de 5.570) com a hierarquia
+    territorial completa, usando a API de Localidades do IBGE (endpoint sem
+    filtro de UF - confirmado que devolve o país inteiro de uma vez).
+
+    A API tem duas cadeias de hierarquia paralelas para cada município
+    (confirmado na estrutura real da resposta):
+      - microrregiao -> mesorregiao -> UF -> regiao
+      - regiao-imediata -> regiao-intermediaria -> UF -> regiao
+    Usamos a segunda (regiao-imediata), que é a divisão territorial mais
+    atual do IBGE (substituiu as antigas mesorregiões/microrregiões para
+    fins de regionalização, mantidas apenas por compatibilidade histórica).
+
+    Retorna uma lista de dicts: codigo, nome, uf_sigla, uf_nome, regiao_nome,
+    regiao_sigla, regiao_imediata_nome.
+    """
+    url = 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios'
+    resp = request_com_retry('get', url, timeout=60)
+    resp.raise_for_status()
+    dados = resp.json()
+
+    resultado = []
+    for m in dados:
+        regiao_imediata = m.get('regiao-imediata') or {}
+        regiao_intermediaria = regiao_imediata.get('regiao-intermediaria') or {}
+        uf = regiao_intermediaria.get('UF') or {}
+        regiao = uf.get('regiao') or {}
+
+        resultado.append({
+            'codigo': m.get('id'),
+            'nome': m.get('nome'),
+            'uf_codigo': uf.get('id'),
+            'uf_sigla': uf.get('sigla'),
+            'uf_nome': uf.get('nome'),
+            'regiao_nome': regiao.get('nome'),
+            'regiao_sigla': regiao.get('sigla'),
+            'regiao_imediata_nome': regiao_imediata.get('nome'),
+        })
+
+    return resultado
