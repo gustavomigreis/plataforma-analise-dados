@@ -101,27 +101,60 @@ INDICADORES = {
 # tipo de rebanho), agrupados visualmente como um subtema expansível na
 # tela de Pesquisa (ver objetos.py SUBGRUPOS) em vez de uma lista plana.
 
-# Culturas com produção real registrada em Santa Catarina (confirmado
-# contra a API real, chamada direta a t/5457/n3/42/v/214/p/2023/c782/all:
-# 37 das 101 categorias de produto desta tabela têm valor numérico
-# reportado para SC; as demais aparecem sempre vazias/suprimidas e foram
-# deixadas de fora para não oferecer opções que nunca retornam dado.
-# Códigos copiados exatamente da resposta real da API, não adivinhados.
+# Todas as culturas da classificação "Produto das lavouras" (c782) da
+# tabela 5457, em nível Brasil - confirmado contra a API real (chamada
+# direta a t/5457/n1/all/v/214/p/last/c782/all): 128 categorias de produto,
+# a lista completa publicada pelo SIDRA, não apenas as que têm produção em
+# Santa Catarina. Como a escala "município" da tela de Pesquisa cobre o
+# Brasil inteiro quando nenhum filtro de UF/região é escolhido, restringir à
+# lista de SC deixava de fora culturas com produção real noutros estados
+# (ex: Açaí, Dendê, Guaraná) - cada município sem produção daquela cultura
+# simplesmente aparece com valor vazio, o que é esperado, não um erro.
+# Terceiro elemento (soma_grupo): False só para "Café (em grão) Arábica" e
+# "Café (em grão) Canephora", que são SUBCONJUNTOS de "Café (em grão) Total"
+# (confirmado contra a API real: Arábica 2.230.589 + Canephora 1.253.765 =
+# Total 3.484.354 t, Brasil 2025) - ficam de fora da soma do indicador-grupo
+# "Todas as Culturas" para não contar a produção de café em dobro. Todas as
+# demais culturas são independentes entre si nesta tabela.
 _PAM_CULTURAS_SC = [
-    (40129, 'Abacate'), (40092, 'Abacaxi'), (40100, 'Alho'),
-    (40101, 'Amendoim (em casca)'), (40102, 'Arroz (em casca)'),
-    (40103, 'Aveia (em grão)'), (40136, 'Banana (cacho)'),
-    (40104, 'Batata-doce'), (40105, 'Batata-inglesa'),
-    (40106, 'Cana-de-açúcar'), (40142, 'Caqui'), (40107, 'Cebola'),
-    (40109, 'Cevada (em grão)'), (40147, 'Erva-mate (folha verde)'),
-    (40112, 'Feijão (em grão)'), (40148, 'Figo'), (40113, 'Fumo (em folha)'),
-    (40149, 'Goiaba'), (40151, 'Laranja'), (40152, 'Limão'),
-    (40260, 'Maçã'), (40119, 'Mandioca'), (40263, 'Maracujá'),
-    (40120, 'Melancia'), (40121, 'Melão'), (40122, 'Milho (em grão)'),
-    (40265, 'Noz (fruto seco)'), (40266, 'Palmito'), (40267, 'Pera'),
-    (40268, 'Pêssego'), (40124, 'Soja (em grão)'), (40125, 'Sorgo (em grão)'),
-    (40271, 'Tangerina'), (40126, 'Tomate'), (40127, 'Trigo (em grão)'),
-    (40128, 'Triticale (em grão)'), (40274, 'Uva'),
+    (40129, 'Abacate', True), (40092, 'Abacaxi', True), (83388, 'Abóbora', True),
+    (45982, 'Açaí', True), (83399, 'Acerola', True), (40329, 'Alfafa fenada', True),
+    (83389, 'Alface', True), (40130, 'Algodão arbóreo (em caroço)', True),
+    (40099, 'Algodão herbáceo (em caroço)', True), (40100, 'Alho', True),
+    (40101, 'Amendoim (em casca)', True), (40102, 'Arroz (em casca)', True),
+    (40103, 'Aveia (em grão)', True), (40131, 'Azeitona', True),
+    (40136, 'Banana (cacho)', True), (40104, 'Batata-doce', True),
+    (40105, 'Batata-inglesa', True), (40137, 'Borracha (látex coagulado)', True),
+    (40468, 'Borracha (látex líquido)', True), (40138, 'Cacau (em amêndoa)', True),
+    (40139, 'Café (em grão) Total', True), (40140, 'Café (em grão) Arábica', False),
+    (40141, 'Café (em grão) Canephora', False), (40330, 'Caju', True),
+    (40106, 'Cana-de-açúcar', True), (40331, 'Cana para forragem', True),
+    (83390, 'Canola', True), (40142, 'Caqui', True), (40143, 'Castanha de caju', True),
+    (40107, 'Cebola', True), (83391, 'Cenoura', True), (40108, 'Centeio (em grão)', True),
+    (40109, 'Cevada (em grão)', True), (40144, 'Chá-da-índia (folha verde)', True),
+    (83392, 'Chuchu', True), (40145, 'Coco-da-baía', True), (83400, 'Cupuaçu', True),
+    (40146, 'Dendê (cacho de coco)', True), (40147, 'Erva-mate (folha verde)', True),
+    (40110, 'Ervilha (em grão)', True), (40111, 'Fava (em grão)', True),
+    (40112, 'Feijão (em grão)', True), (40148, 'Figo', True),
+    (40113, 'Fumo (em folha)', True), (83395, 'Gergelim', True),
+    (40114, 'Girassol (em grão)', True), (40149, 'Goiaba', True),
+    (83401, 'Graviola', True), (40150, 'Guaraná (semente)', True),
+    (83393, 'Inhame', True), (40115, 'Juta (fibra)', True), (40151, 'Laranja', True),
+    (40152, 'Limão', True), (40116, 'Linho (semente)', True), (40260, 'Maçã', True),
+    (40117, 'Malva (fibra)', True), (40261, 'Mamão', True),
+    (40118, 'Mamona (baga)', True), (40119, 'Mandioca', True),
+    (40262, 'Manga', True), (40263, 'Maracujá', True), (40264, 'Marmelo', True),
+    (40120, 'Melancia', True), (40121, 'Melão', True), (40122, 'Milho (em grão)', True),
+    (83394, 'Milho verde', True), (83396, 'Morango', True),
+    (40265, 'Noz (fruto seco)', True), (40266, 'Palmito', True), (40267, 'Pera', True),
+    (40268, 'Pêssego', True), (40269, 'Pimenta-do-reino', True),
+    (83397, 'Pimentão', True), (40123, 'Rami (fibra)', True),
+    (83398, 'Repolho', True), (40270, 'Sisal ou agave (fibra)', True),
+    (40124, 'Soja (em grão)', True), (40125, 'Sorgo (em grão)', True),
+    (40271, 'Tangerina', True), (40126, 'Tomate', True),
+    (40127, 'Trigo (em grão)', True), (40128, 'Triticale (em grão)', True),
+    (40272, 'Tungue (fruto seco)', True), (40273, 'Urucum (semente)', True),
+    (40274, 'Uva', True),
 ]
 
 # Métrica de cada "objeto" PAM gerado por cultura: variável SIDRA + unidade.
@@ -136,7 +169,7 @@ _PAM_METRICAS = {
 }
 
 for _metrica_chave, _metrica_info in _PAM_METRICAS.items():
-    for _cod_cultura, _nome_cultura in _PAM_CULTURAS_SC:
+    for _cod_cultura, _nome_cultura, _entra_no_total_pam in _PAM_CULTURAS_SC:
         _chave = f'pam_{_metrica_chave}_{_cod_cultura}'
         INDICADORES[_chave] = {
             'nome': f'{_metrica_info["sufixo"]} - {_nome_cultura}',
@@ -148,9 +181,10 @@ for _metrica_chave, _metrica_info in _PAM_METRICAS.items():
             # um subtema expansível "Lavouras" em vez de uma lista plana.
             'subgrupo': f'pam_lavouras_{_metrica_chave}',
             'subgrupo_nome': _metrica_info['subgrupo_nome'],
-            # Cada cultura é independente (não há subtotal dentro de outra
-            # cultura nesta tabela), então todas entram na soma do grupo.
-            'soma_grupo': True,
+            # False só para Café Arábica/Canephora, subconjuntos de Café
+            # Total (ver nota em _PAM_CULTURAS_SC) - todas as demais culturas
+            # são independentes entre si e entram na soma do grupo.
+            'soma_grupo': _entra_no_total_pam,
         }
 
 # Tipos de rebanho da PPM (tabela 3939, classificação c79) - confirmado
@@ -402,6 +436,18 @@ def montar_url(indicador_key, nivel, codigo_localidade=None, periodo='last'):
     return url
 
 
+#  "Todos os municípios do Brasil" (n6/all) combinado com "todos os
+# períodos" (p/all) estoura um limite de tamanho de resposta do SIDRA -
+# confirmado contra a API real: t/5457/n6/all/v/214/p/all/c782/40129 (uma
+# única cultura, todos os municípios, todo o histórico) devolve 400, enquanto
+# a mesma consulta com p/last funciona normalmente. Isso NÃO é uma categoria
+# sem dado (o erro acontece com qualquer cultura/tipo de rebanho quando os
+# dois "todos" são combinados ao mesmo tempo) - é só volume de dados grande
+# demais para uma resposta só. Quando isso acontece, tenta de novo com um
+# período mais estreito em vez de propagar o erro "indisponível".
+_PERIODO_FALLBACK_TODOS_MUNICIPIOS = 'last 3'
+
+
 def buscar_dados(indicador_key, nivel, codigo_localidade=None, periodo='last'):
     """
     Consulta o SIDRA e retorna uma lista de dicts já limpa (sem o cabeçalho
@@ -413,13 +459,29 @@ def buscar_dados(indicador_key, nivel, codigo_localidade=None, periodo='last'):
 
     resp = request_com_retry('get', url, timeout=20)
     if resp.status_code == 400:
-        # SIDRA retorna 400 quando a combinação tabela+nível territorial não
-        # existe (ex: uma tabela de estimativa anual que não publica dado por
-        # região intermediária) - mensagem mais clara que o HTTPError cru.
-        raise ValueError(
-            f'O indicador "{INDICADORES.get(indicador_key, {}).get("nome", indicador_key)}" '
-            f'não está disponível nesta escala territorial nesta fonte (SIDRA).'
-        )
+        # "Todos os municípios" + "todos os períodos" ao mesmo tempo é grande
+        # demais para o SIDRA responder de uma vez (ver nota acima) - tenta
+        # de novo com uma janela de período mais estreita antes de desistir,
+        # em vez de mostrar "indisponível nesta escala" para algo que na
+        # verdade está disponível, só não nesse volume.
+        if nivel == 'municipio' and not codigo_localidade and periodo == 'all':
+            url_fallback = montar_url(indicador_key, nivel, codigo_localidade, _PERIODO_FALLBACK_TODOS_MUNICIPIOS)
+            resp_fallback = request_com_retry('get', url_fallback, timeout=20)
+            if resp_fallback.status_code != 400:
+                resp = resp_fallback
+            else:
+                raise ValueError(
+                    f'O indicador "{INDICADORES.get(indicador_key, {}).get("nome", indicador_key)}" '
+                    f'não está disponível nesta escala territorial nesta fonte (SIDRA).'
+                )
+        else:
+            # SIDRA retorna 400 quando a combinação tabela+nível territorial não
+            # existe (ex: uma tabela de estimativa anual que não publica dado por
+            # região intermediária) - mensagem mais clara que o HTTPError cru.
+            raise ValueError(
+                f'O indicador "{INDICADORES.get(indicador_key, {}).get("nome", indicador_key)}" '
+                f'não está disponível nesta escala territorial nesta fonte (SIDRA).'
+            )
     resp.raise_for_status()
     dados_brutos = resp.json()
 
