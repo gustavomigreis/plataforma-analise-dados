@@ -74,11 +74,27 @@ _TEMA_POR_CHAVE_IBGE = {
     'empresas_atuantes': 'trabalho_renda',
     'pessoal_ocupado': 'trabalho_renda',
     'domicilios_total': 'habitacao',
-    'pam_area_plantada': 'agropecuaria',
-    'pam_valor_producao': 'agropecuaria',
-    'pam_quantidade_produzida': 'agropecuaria',
-    'ppm_efetivo_rebanho': 'agropecuaria',
 }
+
+# Prefixos de chave que caem em "agropecuária" por padrão - usado para o PAM
+# (pam_area_plantada_<código>, pam_valor_producao_<código>,
+# pam_quantidade_produzida_<código>, um por cultura) e a PPM
+# (ppm_efetivo_<código>, um por tipo de rebanho), gerados dinamicamente em
+# ibge.py (um indicador fixo por categoria ficaria defasado a cada nova
+# cultura/rebanho adicionado ao catálogo).
+_PREFIXOS_TEMA_IBGE = {
+    'pam_': 'agropecuaria',
+    'ppm_': 'agropecuaria',
+}
+
+
+def _tema_ibge(chave):
+    if chave in _TEMA_POR_CHAVE_IBGE:
+        return _TEMA_POR_CHAVE_IBGE[chave]
+    for prefixo, tema in _PREFIXOS_TEMA_IBGE.items():
+        if chave.startswith(prefixo):
+            return tema
+    return 'outros'
 
 _TEMA_POR_CHAVE_BCB = {
     'selic_meta': 'juros_moeda',
@@ -110,7 +126,14 @@ def _construir_catalogo():
             'nome': info['nome'],
             'unidade': info['unidade'],
             'escalas': sorted(ESCALAS_POR_FONTE['ibge']),
-            'tema': _TEMA_POR_CHAVE_IBGE.get(chave, 'outros'),
+            'tema': _tema_ibge(chave),
+            # Indicadores gerados por categoria (uma cultura, um tipo de
+            # rebanho) trazem 'subgrupo'/'subgrupo_nome' de ibge.py, usados
+            # pela tela de Pesquisa para agrupá-los num subtema expansível
+            # dentro do tema (ex: "Lavouras (por cultura)" dentro de
+            # Agropecuária) em vez de uma lista plana de dezenas de opções.
+            'subgrupo': info.get('subgrupo'),
+            'subgrupo_nome': info.get('subgrupo_nome'),
         }
 
     for chave, info in bcb.INDICADORES.items():
@@ -164,8 +187,10 @@ def listar_objetos(escala=None):
             'escalas': info['escalas'],
             'tema': info['tema'],
             'tema_nome': TEMAS.get(info['tema'], 'Outros'),
+            'subgrupo': info.get('subgrupo'),
+            'subgrupo_nome': info.get('subgrupo_nome'),
         })
-    return sorted(itens, key=lambda x: (x['tema_nome'], x['nome']))
+    return sorted(itens, key=lambda x: (x['tema_nome'], x.get('subgrupo_nome') or '', x['nome']))
 
 
 def _nivel_ibge(escala):
@@ -271,7 +296,21 @@ def buscar_serie_objeto(chave_objeto, escala, codigo_localidade=None, periodo='l
 
     if fonte == 'ibge':
         nivel = _nivel_ibge(escala)
-        dados = ibge.buscar_dados(info['chave_fonte'], nivel, codigo_localidade, periodo)
+        try:
+            dados = ibge.buscar_dados(info['chave_fonte'], nivel, codigo_localidade, periodo)
+        except ValueError:
+            # Tabela não publica este indicador em nível de região
+            # intermediária (comum em PAM/PPM - confirmado contra a API
+            # real). Em vez de propagar o erro "indisponível nesta escala",
+            # soma/agrega o dado a partir dos municípios de cada região -
+            # ver ibge.buscar_dados_agregado_por_regiao. Só faz sentido para
+            # a escala 'regiao' (não há fallback ascendente sensato para
+            # 'uf' ou 'brasil' a partir de milhares de municípios de uma vez
+            # sem um filtro territorial, e essas escalas normalmente já têm
+            # dado direto da fonte quando município tem).
+            if nivel != 'regiao':
+                raise
+            dados = ibge.buscar_dados_agregado_por_regiao(info['chave_fonte'], periodo)
         serie = [
             {'localidade': d['localidade'], 'periodo': d['periodo'], 'valor': d['valor']}
             for d in dados

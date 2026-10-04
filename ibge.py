@@ -88,43 +88,85 @@ INDICADORES = {
         'variavel': 381,
         'unidade': 'domicílios',
     },
-    # Agropecuária (PAM - Produção Agrícola Municipal)
-    'pam_area_plantada': {
-        'nome': 'Área Plantada ou Destinada à Colheita (Lavouras)',
-        'tabela': 5457,
-        'variavel': 8331,
-        'unidade': 'hectares',
-    },
-    'pam_valor_producao': {
-        'nome': 'Valor da Produção Agrícola (Lavouras)',
-        'tabela': 5457,
-        'variavel': 215,
-        'unidade': 'mil reais',
-    },
-    'pam_quantidade_produzida': {
-        'nome': 'Quantidade Produzida (Lavouras)',
-        'tabela': 5457,
-        'variavel': 214,
-        'unidade': 'toneladas',
-    },
-    # Pecuária (PPM - Pesquisa da Pecuária Municipal)
-    'ppm_efetivo_rebanho': {
-        'nome': 'Efetivo de Bovinos (Pecuária Municipal)',
+}
+
+# --- Agropecuária (PAM - Produção Agrícola Municipal, tabela 5457) e
+# (PPM - Pesquisa da Pecuária Municipal, tabela 3939): ambas têm uma
+# classificação obrigatória (produto da lavoura / tipo de rebanho) - sem
+# especificar uma categoria, o SIDRA devolve só ".." (sem dado), confirmado
+# contra a API real (a categoria "0 Total" da PAM está vazia nesta tabela,
+# e a PPM não tem "total" nenhum - cada espécie é uma contagem separada).
+# Por isso, em vez de um indicador genérico "Quantidade Produzida", o
+# catálogo gera um indicador por categoria específica (cada cultura, cada
+# tipo de rebanho), agrupados visualmente como um subtema expansível na
+# tela de Pesquisa (ver objetos.py SUBGRUPOS) em vez de uma lista plana.
+
+# Culturas com produção real registrada em Santa Catarina (confirmado
+# contra a API real, chamada direta a t/5457/n3/42/v/214/p/2023/c782/all:
+# 37 das 101 categorias de produto desta tabela têm valor numérico
+# reportado para SC; as demais aparecem sempre vazias/suprimidas e foram
+# deixadas de fora para não oferecer opções que nunca retornam dado.
+# Códigos copiados exatamente da resposta real da API, não adivinhados.
+_PAM_CULTURAS_SC = [
+    (40129, 'Abacate'), (40092, 'Abacaxi'), (40100, 'Alho'),
+    (40101, 'Amendoim (em casca)'), (40102, 'Arroz (em casca)'),
+    (40103, 'Aveia (em grão)'), (40136, 'Banana (cacho)'),
+    (40104, 'Batata-doce'), (40105, 'Batata-inglesa'),
+    (40106, 'Cana-de-açúcar'), (40142, 'Caqui'), (40107, 'Cebola'),
+    (40109, 'Cevada (em grão)'), (40147, 'Erva-mate (folha verde)'),
+    (40112, 'Feijão (em grão)'), (40148, 'Figo'), (40113, 'Fumo (em folha)'),
+    (40149, 'Goiaba'), (40151, 'Laranja'), (40152, 'Limão'),
+    (40260, 'Maçã'), (40119, 'Mandioca'), (40263, 'Maracujá'),
+    (40120, 'Melancia'), (40121, 'Melão'), (40122, 'Milho (em grão)'),
+    (40265, 'Noz (fruto seco)'), (40266, 'Palmito'), (40267, 'Pera'),
+    (40268, 'Pêssego'), (40124, 'Soja (em grão)'), (40125, 'Sorgo (em grão)'),
+    (40271, 'Tangerina'), (40126, 'Tomate'), (40127, 'Trigo (em grão)'),
+    (40128, 'Triticale (em grão)'), (40274, 'Uva'),
+]
+
+# Métrica de cada "objeto" PAM gerado por cultura: variável SIDRA + unidade.
+_PAM_METRICAS = {
+    'area_plantada': {'sufixo': 'Área Plantada ou Destinada à Colheita', 'variavel': 8331, 'unidade': 'hectares'},
+    'valor_producao': {'sufixo': 'Valor da Produção', 'variavel': 215, 'unidade': 'mil reais'},
+    'quantidade_produzida': {'sufixo': 'Quantidade Produzida', 'variavel': 214, 'unidade': 'toneladas'},
+}
+
+for _metrica_chave, _metrica_info in _PAM_METRICAS.items():
+    for _cod_cultura, _nome_cultura in _PAM_CULTURAS_SC:
+        _chave = f'pam_{_metrica_chave}_{_cod_cultura}'
+        INDICADORES[_chave] = {
+            'nome': f'{_metrica_info["sufixo"]} - {_nome_cultura}',
+            'tabela': 5457,
+            'variavel': _metrica_info['variavel'],
+            'unidade': _metrica_info['unidade'],
+            'classificacao': f'c782/{_cod_cultura}',
+            # Usado pelo catálogo (objetos.py) para agrupar estes itens como
+            # um subtema expansível "Lavouras" em vez de uma lista plana.
+            'subgrupo': 'pam_lavouras',
+            'subgrupo_nome': 'Lavouras (por cultura)',
+        }
+
+# Tipos de rebanho da PPM (tabela 3939, classificação c79) - confirmado
+# contra a API real/metadados do SIDRA, são só estas 10 categorias (mais
+# "0 Total", que não existe como opção válida nesta tabela).
+_PPM_TIPOS_REBANHO = [
+    (2670, 'Bovino'), (2675, 'Bubalino'), (2672, 'Equino'),
+    (32794, 'Suíno - total'), (32795, 'Suíno - matrizes de suínos'),
+    (2681, 'Caprino'), (2677, 'Ovino'), (32796, 'Galináceos - total'),
+    (32793, 'Galináceos - galinhas'), (2680, 'Codornas'),
+]
+
+for _cod_rebanho, _nome_rebanho in _PPM_TIPOS_REBANHO:
+    _chave = f'ppm_efetivo_{_cod_rebanho}'
+    INDICADORES[_chave] = {
+        'nome': f'Efetivo de Rebanhos - {_nome_rebanho}',
         'tabela': 3939,
         'variavel': 105,
         'unidade': 'cabeças',
-        # A tabela 3939 tem uma classificação obrigatória "Tipo de rebanho"
-        # (c79) sem a qual a API devolve só ".." (sem dado) - confirmado
-        # contra a API real, que exige escolher uma categoria (Bovino,
-        # Suíno, Equino etc; não existe um "total geral" somando todas as
-        # espécies, cada uma é contada em unidades diferentes). Usamos
-        # Bovino (c79/2670) como padrão - é a espécie de maior relevância
-        # econômica para SC e a mais comumente citada como "efetivo do
-        # rebanho" sem qualificação. O nome do indicador deixa isso
-        # explícito para não sugerir que é a soma de todos os rebanhos.
-        'classificacao': 'c79/2670',
-    },
-}
+        'classificacao': f'c79/{_cod_rebanho}',
+        'subgrupo': 'ppm_criacao',
+        'subgrupo_nome': 'Criação (por tipo de rebanho)',
+    }
 
 # Como agregar o indicador quando o usuário seleciona várias localidades de
 # uma vez (ex: Palhoça + Florianópolis + Biguaçu) e pede o valor "aglomerado"
@@ -451,6 +493,15 @@ def buscar_municipios_sc():
     return [{'codigo': m['id'], 'nome': m['nome']} for m in dados]
 
 
+# Cache em memória do processo para buscar_municipios_brasil() - a lista de
+# municípios do Brasil não muda durante a vida do processo, e a resposta
+# completa (~5.570 municípios) é pesada o bastante (chamada separada da API
+# de Localidades, não do SIDRA) para valer a pena não refazer a cada
+# consulta - usada tanto pela tela de Pesquisa quanto, agora, pelo fallback
+# de agregação por região intermediária (ver _agregar_por_regiao_intermediaria).
+_cache_municipios_brasil = None
+
+
 def buscar_municipios_brasil():
     """
     Retorna todos os municípios do Brasil (cerca de 5.570) com a hierarquia
@@ -466,8 +517,13 @@ def buscar_municipios_brasil():
     fins de regionalização, mantidas apenas por compatibilidade histórica).
 
     Retorna uma lista de dicts: codigo, nome, uf_sigla, uf_nome, regiao_nome,
-    regiao_sigla, regiao_imediata_nome.
+    regiao_sigla, regiao_imediata_nome. Resultado cacheado em memória (ver
+    _cache_municipios_brasil acima).
     """
+    global _cache_municipios_brasil
+    if _cache_municipios_brasil is not None:
+        return _cache_municipios_brasil
+
     url = 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios'
     resp = request_com_retry('get', url, timeout=60)
     resp.raise_for_status()
@@ -497,6 +553,74 @@ def buscar_municipios_brasil():
             # listar cada código de município manualmente.
             'regiao_intermediaria_codigo': regiao_intermediaria.get('id'),
             'regiao_intermediaria_nome': regiao_intermediaria.get('nome'),
+        })
+
+    _cache_municipios_brasil = resultado
+    return resultado
+
+
+def buscar_dados_agregado_por_regiao(indicador_key, periodo='last'):
+    """
+    Fallback para quando uma tabela do SIDRA não publica dado em nível de
+    região geográfica intermediária (n24) - caso comum em tabelas como PAM e
+    PPM (confirmado contra a API real: ambas só vão até Brasil/UF/Município,
+    sem região intermediária nem mesorregião/microrregião atualizadas).
+
+    Em vez de mostrar "indisponível nesta escala", busca o dado em nível de
+    MUNICÍPIO para o Brasil inteiro (n6/all) e soma os valores de cada
+    município dentro da mesma região intermediária, usando a hierarquia de
+    buscar_municipios_brasil() para saber a qual região cada município
+    pertence. É uma aproximação por agregação ascendente (soma das partes),
+    não um dado oficial do IBGE em nível de região - mas é a melhor
+    estimativa disponível quando a fonte não publica o nível diretamente.
+
+    Faz sentido para indicadores de CONTAGEM/TOTAL (população, produção,
+    efetivo de rebanho, PIB...), que são aditivos; não deveria ser usado
+    para índices/razões (não faz sentido "somar" uma idade mediana entre
+    municípios - ver ibge.AGREGACAO_PADRAO, a mesma lista usada para decidir
+    soma vs. média ao agregar várias localidades selecionadas manualmente).
+
+    Retorna o mesmo formato de buscar_dados(), mas com 'localidade' sendo o
+    nome da região intermediária (ex: "Região Geográfica Intermediária de
+    Florianópolis") em vez do nome do município.
+    """
+    dados_municipio = buscar_dados(indicador_key, 'municipio', None, periodo)
+    if not dados_municipio:
+        return []
+
+    municipios = buscar_municipios_brasil()
+    nome_regiao_por_codigo_municipio = {
+        str(m['codigo']): m.get('regiao_intermediaria_nome')
+        for m in municipios
+        if m.get('regiao_intermediaria_nome')
+    }
+
+    modo = AGREGACAO_PADRAO.get(indicador_key, 'soma')
+
+    # Agrupa por (região, período) e soma/tira a média dos valores dos
+    # municípios dentro de cada região - ignora município sem valor (None)
+    # em vez de descartar o período inteiro, e ignora município sem região
+    # conhecida (não deveria acontecer, mas não quebra a consulta se faltar
+    # um registro na hierarquia de localidades).
+    agrupado = {}
+    for item in dados_municipio:
+        nome_regiao = nome_regiao_por_codigo_municipio.get(str(item['localidade_codigo']))
+        if not nome_regiao or item['valor'] is None:
+            continue
+        chave_grupo = (nome_regiao, item['periodo'])
+        agrupado.setdefault(chave_grupo, []).append(item['valor'])
+
+    indicador = INDICADORES[indicador_key]
+    resultado = []
+    for (nome_regiao, periodo_item), valores in agrupado.items():
+        valor_agregado = (sum(valores) / len(valores)) if modo == 'media' else sum(valores)
+        resultado.append({
+            'localidade': nome_regiao,
+            'localidade_codigo': None,
+            'periodo': periodo_item,
+            'indicador': indicador['nome'],
+            'valor': valor_agregado,
+            'unidade': indicador['unidade'],
         })
 
     return resultado

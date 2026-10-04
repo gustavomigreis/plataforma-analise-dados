@@ -303,6 +303,41 @@
             }
         }
 
+        /* Subgrupo expansível dentro de uma caixa de tema (ex: "Lavouras (por
+           cultura)" dentro de Agropecuária) - evita dezenas de checkboxes
+           soltos quando um tema tem uma opção por categoria específica. */
+        .pesquisa-subgrupo-detalhe {
+            margin-top: 6px;
+        }
+
+        .pesquisa-subgrupo-detalhe summary {
+            cursor: pointer;
+            padding: 6px 2px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--cinza-texto);
+            list-style: none;
+        }
+
+        .pesquisa-subgrupo-detalhe summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .pesquisa-subgrupo-detalhe summary::before {
+            content: '▸ ';
+            color: var(--vermelho);
+        }
+
+        .pesquisa-subgrupo-detalhe[open] summary::before {
+            content: '▾ ';
+        }
+
+        .pesquisa-subgrupo-itens {
+            padding-left: 10px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
         /* Bloco de dados brutos por objeto na tela de Pesquisa - recolhido
            por padrão (o gráfico já vem aberto acima), expande ao tocar. */
         .pesquisa-dados-detalhe summary {
@@ -1180,23 +1215,45 @@
             // para o usuário encontrar variáveis por assunto mesmo quando vêm
             // de fontes diferentes (ex: câmbio do BCB ao lado de comércio
             // exterior do Comex Stat, ambos em "Comércio Exterior e Câmbio").
+            // Dentro de um tema, objetos com 'subgrupo' (ex: uma linha por
+            // cultura dentro de "Lavouras", uma por tipo de rebanho dentro de
+            // "Criação") ficam recolhidos num <details> em vez de uma lista
+            // plana de dezenas de checkboxes - evita que a caixa de
+            // Agropecuária sozinha tome a tela toda.
             const temas = new Map();
             disponiveis.forEach(obj => {
-                if (!temas.has(obj.tema_nome)) temas.set(obj.tema_nome, []);
-                temas.get(obj.tema_nome).push(obj);
+                if (!temas.has(obj.tema_nome)) temas.set(obj.tema_nome, {diretos: [], subgrupos: new Map()});
+                const grupoTema = temas.get(obj.tema_nome);
+                if (obj.subgrupo_nome) {
+                    if (!grupoTema.subgrupos.has(obj.subgrupo_nome)) grupoTema.subgrupos.set(obj.subgrupo_nome, []);
+                    grupoTema.subgrupos.get(obj.subgrupo_nome).push(obj);
+                } else {
+                    grupoTema.diretos.push(obj);
+                }
             });
 
+            function pesquisa_renderizar_checkbox_objeto(obj) {
+                return `
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer;">
+                        <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
+                        <span style="font-size: 13.5px;">${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
+                    </label>`;
+            }
+
             let html = '<div class="pesquisa-temas-grid">';
-            for (const [temaNome, objs] of temas) {
+            for (const [temaNome, grupoTema] of temas) {
                 html += `<div class="pesquisa-tema-caixa">
                     <div class="pesquisa-tema-titulo">${temaNome}</div>`;
-                objs.forEach(obj => {
+                grupoTema.diretos.forEach(obj => { html += pesquisa_renderizar_checkbox_objeto(obj); });
+                for (const [subgrupoNome, objs] of grupoTema.subgrupos) {
                     html += `
-                        <label style="display: flex; align-items: center; gap: 8px; padding: 5px 2px; cursor: pointer;">
-                            <input type="checkbox" value="${obj.chave}" class="pesquisa_objeto_checkbox" style="width: auto; flex-shrink: 0;">
-                            <span style="font-size: 13.5px;">${obj.nome} <span style="color: var(--cinza-texto); font-size: 12px;">(${obj.unidade})</span></span>
-                        </label>`;
-                });
+                        <details class="pesquisa-subgrupo-detalhe">
+                            <summary>${subgrupoNome} (${objs.length})</summary>
+                            <div class="pesquisa-subgrupo-itens">
+                                ${objs.map(pesquisa_renderizar_checkbox_objeto).join('')}
+                            </div>
+                        </details>`;
+                }
                 html += '</div>';
             }
             html += '</div>';
